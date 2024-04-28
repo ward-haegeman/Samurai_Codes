@@ -14,8 +14,6 @@ endif()
 
 set(CMAKE_CXX_STANDARD 17)
 
-#add_executable(relaxation_Rusanov main.cpp)
-#target_link_libraries(relaxation_Rusanov samurai::samurai CLI11::CLI11)
-add_executable(relaxation_Suliciu main.cpp)
-target_link_libraries(relaxation_Suliciu samurai::samurai CLI11::CLI11)
+add_executable(BN_test main.cpp)
+target_link_libraries(BN_test samurai::samurai CLI11::CLI11)
 

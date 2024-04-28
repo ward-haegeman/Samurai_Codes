@@ -1,0 +1,10 @@
+*.xdmf
+*.h5
+*.png
+
+*/CMakeCache.txt
+*/CMakeFiles
+*/Makefile
+*/cmake_install.cmake
+
+*/*
