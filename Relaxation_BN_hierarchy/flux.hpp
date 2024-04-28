@@ -22,11 +22,11 @@ namespace EquationData {
   static constexpr std::size_t NVARS = ALPHA2_RHO2_E2_INDEX + 1;
 
   // Parameters related to the EOS for the two phases
-  static constexpr double gamma_1    = 4.4;
-  static constexpr double pi_infty_1 = 6e8;
+  static constexpr double gamma_1    = 2.35;
+  static constexpr double pi_infty_1 = 1e9;
   static constexpr double q_infty_1  = 0.0;
 
-  static constexpr double gamma_2    = 1.4;
+  static constexpr double gamma_2    = 1.43;
   static constexpr double pi_infty_2 = 0.0;
   static constexpr double q_infty_2  = 0.0;
 }
@@ -276,13 +276,25 @@ namespace samurai {
     }
     const auto pIL   = this->phase2.pres_value(rho2L, e2L);
 
-    // Build the non conservative flux (a lot of approximations to be checked here)
-    res(ALPHA1_INDEX) = 0.5*velIL*qR(ALPHA1_INDEX);
+    // Interfacial velocity and interfacial pressure computed from right state
+    const auto velIR = qR(ALPHA1_RHO1_U1_INDEX + curr_d)/qR(ALPHA1_RHO1_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+    const auto rho2R = qR(ALPHA2_RHO2_INDEX)/(1.0 - qR(ALPHA1_INDEX)); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+    auto e2R         = qR(ALPHA2_RHO2_E2_INDEX)/qR(ALPHA2_RHO2_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+    for(std::size_t d = 0; d < EquationData::dim; ++d) {
+      e2R -= 0.5*(qR(ALPHA2_RHO2_U2_INDEX + d)/qR(ALPHA2_RHO2_INDEX))*(qR(ALPHA2_RHO2_U2_INDEX + d)/qR(ALPHA2_RHO2_INDEX)); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+    }
+    const auto pIR   = this->phase2.pres_value(rho2R, e2R);
 
-    res(ALPHA1_RHO1_U1_INDEX + curr_d) = -0.5*pIL*qR(ALPHA1_INDEX);
+    // Build the non conservative flux (Bassi-Rebay formulation)
+    res(ALPHA1_INDEX) = (0.5*(velIL*qL(ALPHA1_INDEX) + velIR*qR(ALPHA1_INDEX)) -
+                         0.5*(velIL + velIR)*qL(ALPHA1_INDEX));
+
+    res(ALPHA1_RHO1_U1_INDEX + curr_d) = -(0.5*(pIL*qL(ALPHA1_INDEX) + pIR*qR(ALPHA1_INDEX)) -
+                                           0.5*(pIL + pIR)*qL(ALPHA1_INDEX));
     res(ALPHA2_RHO2_U2_INDEX + curr_d) = -res(ALPHA1_RHO1_U1_INDEX + curr_d);
 
-    res(ALPHA1_RHO1_E1_INDEX) = -0.5*velIL*pIL*qR(ALPHA1_INDEX);
+    res(ALPHA1_RHO1_E1_INDEX) = -(0.5*(pIL*velIL*qL(ALPHA1_INDEX) + pIR*velIR*qR(ALPHA1_INDEX)) -
+                                  0.5*(pIL*velIL + pIR*velIR)*qL(ALPHA1_INDEX));
     res(ALPHA2_RHO2_E2_INDEX) = -res(ALPHA1_RHO1_E1_INDEX);
 
     return res;
@@ -301,6 +313,15 @@ namespace samurai {
     res(ALPHA1_RHO1_INDEX) = 0.0;
     res(ALPHA2_RHO2_INDEX) = 0.0;
 
+    // Interfacial velocity and interfacial pressure computed from left state
+    const auto velIL = qL(ALPHA1_RHO1_U1_INDEX + curr_d)/qL(ALPHA1_RHO1_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+    const auto rho2L = qL(ALPHA2_RHO2_INDEX)/(1.0 - qL(ALPHA1_INDEX)); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+    auto e2L         = qL(ALPHA2_RHO2_E2_INDEX)/qL(ALPHA2_RHO2_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+    for(std::size_t d = 0; d < EquationData::dim; ++d) {
+      e2L -= 0.5*(qL(ALPHA2_RHO2_U2_INDEX + d)/qL(ALPHA2_RHO2_INDEX))*(qL(ALPHA2_RHO2_U2_INDEX + d)/qL(ALPHA2_RHO2_INDEX)); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+    }
+    const auto pIL   = this->phase2.pres_value(rho2L, e2L);
+
     // Interfacial velocity and interfacial pressure computed from right state
     const auto velIR = qR(ALPHA1_RHO1_U1_INDEX + curr_d)/qR(ALPHA1_RHO1_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
     const auto rho2R = qR(ALPHA2_RHO2_INDEX)/(1.0 - qR(ALPHA1_INDEX)); /*--- TODO: Add treatment for vanishing volume fraction ---*/
@@ -310,13 +331,16 @@ namespace samurai {
     }
     const auto pIR   = this->phase2.pres_value(rho2R, e2R);
 
-    // Build the non conservative flux (a lot of approximations to be checked here)
-    res(ALPHA1_INDEX) = -0.5*velIR*qL(ALPHA1_INDEX);
+    // Build the non conservative flux (Bassi-Rebay formulation)
+    res(ALPHA1_INDEX) = -(0.5*(velIL*qL(ALPHA1_INDEX) + velIR*qR(ALPHA1_INDEX)) -
+                          0.5*(velIL + velIR)*qR(ALPHA1_INDEX));
 
-    res(ALPHA1_RHO1_U1_INDEX + curr_d) = 0.5*pIR*qL(ALPHA1_INDEX);
+    res(ALPHA1_RHO1_U1_INDEX + curr_d) = (0.5*(pIL*qL(ALPHA1_INDEX) + pIR*qR(ALPHA1_INDEX)) -
+                                          0.5*(pIL + pIR)*qR(ALPHA1_INDEX));
     res(ALPHA2_RHO2_U2_INDEX + curr_d) = -res(ALPHA1_RHO1_U1_INDEX + curr_d);
 
-    res(ALPHA1_RHO1_E1_INDEX) = 0.5*velIR*pIR*qL(ALPHA1_INDEX);
+    res(ALPHA1_RHO1_E1_INDEX) = (0.5*(pIL*velIL*qL(ALPHA1_INDEX) + pIR*velIR*qR(ALPHA1_INDEX)) -
+                                 0.5*(pIL*velIL + pIR*velIR)*qR(ALPHA1_INDEX));
     res(ALPHA2_RHO2_E2_INDEX) = -res(ALPHA1_RHO1_E1_INDEX);
 
     return res;

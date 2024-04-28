@@ -14,11 +14,14 @@ namespace fs = std::filesystem;
 
 #include "flux.hpp"
 
+#define SULICIU_RELAXATION
+//#define RUSANOV_FLUX
+
 // Specify the use of this namespace where we just store the indices
 // and some parameters related to the equations of state
 using namespace EquationData;
 
-// This is the class for the simulation of a two-scale model
+// This is the class for the simulation of a BN model
 //
 template<std::size_t dim>
 class Relaxation {
@@ -74,11 +77,16 @@ private:
   const SG_EOS<> EOS_phase1; // Equation of state of phase 1
   const SG_EOS<> EOS_phase2; // Equation of state of phase 2
 
-  samurai::RusanovFlux<Field> numerical_flux_cons; // function to compute the numerical flux for the conservative part
+  #ifdef SULICIU_RELAXATION
+    samurai::RelaxationFlux<Field> numerical_flux; // function to compute the numerical flux
                                                    // (this is necessary to call 'make_flux')
+  #elifdef RUSANOV_FLUX
+    samurai::RusanovFlux<Field> numerical_flux_cons; // function to compute the numerical flux for the conservative part
+                                                     // (this is necessary to call 'make_flux')
 
-  samurai::NonConservativeFlux<Field> numerical_flux_non_cons; // function to compute the numerical flux for the non-conservative part
-                                                               // (this is necessary to call 'make_flux')
+    samurai::NonConservativeFlux<Field> numerical_flux_non_cons; // function to compute the numerical flux for the non-conservative part
+                                                                 // (this is necessary to call 'make_flux')
+  #endif
 
   // Now we declare a bunch of fields which depend from the state, but it is useful
   // to have it for the output
@@ -89,7 +97,9 @@ private:
                c1,
                rho2,
                p2,
-               c2;
+               c2,
+               alpha2,
+               Y2;
 
   Field_Vect vel1,
              vel2,
@@ -100,11 +110,13 @@ private:
 
   void update_auxiliary_fields(); // Routine to update auxilairy fields for output and time step update
 
-  double get_max_lambda() const; // Compute the estimate of the maximum eigenvalue
+  #ifdef RUSANOV_FLUX
+    double get_max_lambda() const; // Compute the estimate of the maximum eigenvalue
+  #endif
 
   void update_velocity_before_relaxation(); // Update velocity fields before relaxation
 
-  void apply_instantaneous_velocity_relxation(); // Apply an instantaneous velocity relaxtion
+  void apply_instantaneous_velocity_relaxation(); // Apply an instantaneous velocity relaxtion
 
   void update_pressure_before_relaxation(); // Update pressure fields before relaxation
 
@@ -114,33 +126,62 @@ private:
 
 // Implement class constructor
 //
-template<std::size_t dim>
-Relaxation<dim>::Relaxation(const xt::xtensor_fixed<double, xt::xshape<dim>>& min_corner,
-                            const xt::xtensor_fixed<double, xt::xshape<dim>>& max_corner,
-                            std::size_t min_level, std::size_t max_level,
-                            double Tf_, double cfl_, std::size_t nfiles_,
-                            bool do_vel_relax, bool do_pres_relax,
-                            bool do_pres_reinit, bool do_energy_update_phase_1,
-                            bool do_preserve_energy):
-  box(min_corner, max_corner), mesh(box, min_level, max_level, {false}),
-  Tf(Tf_), cfl(cfl_), nfiles(nfiles_),
-  apply_velocity_relax(do_vel_relax), apply_pressure_relax(do_pres_relax),
-  apply_pressure_reinit(do_pres_reinit), start_energy_update_phase_1(do_energy_update_phase_1),
-  preserve_energy(do_preserve_energy),
-  EOS_phase1(EquationData::gamma_1, EquationData::pi_infty_1, EquationData::q_infty_1),
-  EOS_phase2(EquationData::gamma_2, EquationData::pi_infty_2, EquationData::q_infty_2),
-  numerical_flux_cons(EOS_phase1, EOS_phase2),
-  numerical_flux_non_cons(EOS_phase1, EOS_phase2) {
-    if(!apply_velocity_relax) {
-      assert(!apply_pressure_relax && "You cannot apply pressure relaxation without applying velocity relaxation");
-    }
-    if(apply_pressure_relax) {
-      assert(apply_velocity_relax && "You cannot apply pressure relaxation without applying velocity relaxation");
-    }
-    std::cout << "Initializing variables" << std::endl;
-    std::cout << std::endl;
-    init_variables();
-}
+#ifdef SULICIU_RELAXATION
+  template<std::size_t dim>
+  Relaxation<dim>::Relaxation(const xt::xtensor_fixed<double, xt::xshape<dim>>& min_corner,
+                              const xt::xtensor_fixed<double, xt::xshape<dim>>& max_corner,
+                              std::size_t min_level, std::size_t max_level,
+                              double Tf_, double cfl_, std::size_t nfiles_,
+                              bool do_vel_relax, bool do_pres_relax,
+                              bool do_pres_reinit, bool do_energy_update_phase_1,
+                              bool do_preserve_energy):
+    box(min_corner, max_corner), mesh(box, min_level, max_level, {false}),
+    Tf(Tf_), cfl(cfl_), nfiles(nfiles_),
+    apply_velocity_relax(do_vel_relax), apply_pressure_relax(do_pres_relax),
+    apply_pressure_reinit(do_pres_reinit), start_energy_update_phase_1(do_energy_update_phase_1),
+    preserve_energy(do_preserve_energy),
+    EOS_phase1(EquationData::gamma_1, EquationData::pi_infty_1, EquationData::q_infty_1),
+    EOS_phase2(EquationData::gamma_2, EquationData::pi_infty_2, EquationData::q_infty_2),
+    numerical_flux(EOS_phase1, EOS_phase2) {
+      if(!apply_velocity_relax) {
+        assert(!apply_pressure_relax && "You cannot apply pressure relaxation without applying velocity relaxation");
+      }
+      if(apply_pressure_relax) {
+        assert(apply_velocity_relax && "You cannot apply pressure relaxation without applying velocity relaxation");
+      }
+      std::cout << "Initializing variables" << std::endl;
+      std::cout << std::endl;
+      init_variables();
+  }
+#elifdef RUSANOV_FLUX
+  template<std::size_t dim>
+  Relaxation<dim>::Relaxation(const xt::xtensor_fixed<double, xt::xshape<dim>>& min_corner,
+                              const xt::xtensor_fixed<double, xt::xshape<dim>>& max_corner,
+                              std::size_t min_level, std::size_t max_level,
+                              double Tf_, double cfl_, std::size_t nfiles_,
+                              bool do_vel_relax, bool do_pres_relax,
+                              bool do_pres_reinit, bool do_energy_update_phase_1,
+                              bool do_preserve_energy):
+    box(min_corner, max_corner), mesh(box, min_level, max_level, {false}),
+    Tf(Tf_), cfl(cfl_), nfiles(nfiles_),
+    apply_velocity_relax(do_vel_relax), apply_pressure_relax(do_pres_relax),
+    apply_pressure_reinit(do_pres_reinit), start_energy_update_phase_1(do_energy_update_phase_1),
+    preserve_energy(do_preserve_energy),
+    EOS_phase1(EquationData::gamma_1, EquationData::pi_infty_1, EquationData::q_infty_1),
+    EOS_phase2(EquationData::gamma_2, EquationData::pi_infty_2, EquationData::q_infty_2),
+    numerical_flux_cons(EOS_phase1, EOS_phase2),
+    numerical_flux_non_cons(EOS_phase1, EOS_phase2) {
+      if(!apply_velocity_relax) {
+        assert(!apply_pressure_relax && "You cannot apply pressure relaxation without applying velocity relaxation");
+      }
+      if(apply_pressure_relax) {
+        assert(apply_velocity_relax && "You cannot apply pressure relaxation without applying velocity relaxation");
+      }
+      std::cout << "Initializing variables" << std::endl;
+      std::cout << std::endl;
+      init_variables();
+  }
+#endif
 
 
 // Initialization of conserved and auxiliary variables
@@ -150,47 +191,50 @@ void Relaxation<dim>::init_variables() {
   // Create conserved and auxiliary fields
   conserved_variables = samurai::make_field<double, EquationData::NVARS>("conserved", mesh);
 
-  rho  = samurai::make_field<double, 1>("rho", mesh);
-  p    = samurai::make_field<double, 1>("p", mesh);
+  rho    = samurai::make_field<double, 1>("rho", mesh);
+  p      = samurai::make_field<double, 1>("p", mesh);
 
-  rho1 = samurai::make_field<double, 1>("rho1", mesh);
-  p1   = samurai::make_field<double, 1>("p1", mesh);
-  c1   = samurai::make_field<double, 1>("c1", mesh);
+  rho1   = samurai::make_field<double, 1>("rho1", mesh);
+  p1     = samurai::make_field<double, 1>("p1", mesh);
+  c1     = samurai::make_field<double, 1>("c1", mesh);
 
-  rho2 = samurai::make_field<double, 1>("rho2", mesh);
-  p2   = samurai::make_field<double, 1>("p2", mesh);
-  c2   = samurai::make_field<double, 1>("c2", mesh);
+  rho2   = samurai::make_field<double, 1>("rho2", mesh);
+  p2     = samurai::make_field<double, 1>("p2", mesh);
+  c2     = samurai::make_field<double, 1>("c2", mesh);
 
-  vel1 = samurai::make_field<double, dim>("vel1", mesh);
-  vel2 = samurai::make_field<double, dim>("vel2", mesh);
-  vel  = samurai::make_field<double, dim>("vel", mesh);
+  vel1   = samurai::make_field<double, dim>("vel1", mesh);
+  vel2   = samurai::make_field<double, dim>("vel2", mesh);
+  vel    = samurai::make_field<double, dim>("vel", mesh);
 
-  const double xd = 0.75;
+  alpha2 = samurai::make_field<double, 1>("alpha2", mesh);
+  Y2     = samurai::make_field<double, 1>("Y2", mesh);
+
+  const double xd = 0.5;
 
   // Initialize the fields with a loop over all cells
-  const double alpha1L = 1.0 - 1e-6;
+  const double alpha1L = 1.0 - 1e-2;
 
-  const double vel1L   = 0.0;
-  const double p1L     = 1e9;
-  const double rho1L   = 1000.0;
+  const double vel1L   = -2.0;
+  const double p1L     = 1e5;
+  const double rho1L   = 1150.0;
 
   const double alpha2L = 1.0 - alpha1L;
 
-  const double vel2L   = 0.0;
-  const double p2L     = 1e9;
-  const double rho2L   = 1.0;
+  const double vel2L   = -2.0;
+  const double p2L     = 1e5;
+  const double rho2L   = 0.63;
 
-  const double alpha1R = 1.0 - alpha1L;
+  const double alpha1R = alpha1L;
 
-  const double vel1R   = 0.0;
+  const double vel1R   = 2.0;
   const double p1R     = 1e5;
-  const double rho1R   = 1000.0;
+  const double rho1R   = 1150.0;
 
   const double alpha2R = 1.0 - alpha1R;
 
-  const double vel2R   = 0.0;
+  const double vel2R   = 2.0;
   const double p2R     = 1e5;
-  const double rho2R   = 1.0;
+  const double rho2R   = 0.63;
 
   samurai::for_each_cell(mesh,
                          [&](const auto& cell)
@@ -243,6 +287,9 @@ void Relaxation<dim>::init_variables() {
 
                            vel[cell] = conserved_variables[cell][ALPHA1_RHO1_INDEX]/rho[cell]*vel1[cell]
                                      + conserved_variables[cell][ALPHA2_RHO2_INDEX]/rho[cell]*vel2[cell];
+
+                           alpha2[cell] = 1.0 - conserved_variables[cell][ALPHA1_INDEX];
+                           Y2[cell]     = conserved_variables[cell][ALPHA2_RHO2_INDEX]/rho[cell];
                          });
 
 
@@ -273,7 +320,7 @@ void Relaxation<dim>::update_velocity_before_relaxation() {
 // Apply the instantaneous relaxation for the velocity
 //
 template<std::size_t dim>
-void Relaxation<dim>::apply_instantaneous_velocity_relxation() {
+void Relaxation<dim>::apply_instantaneous_velocity_relaxation() {
   samurai::for_each_cell(mesh,
                          [&](const auto& cell)
                          {
@@ -466,23 +513,24 @@ void Relaxation<dim>::apply_instantaneous_pressure_relaxation() {
 }
 
 
+#ifdef RUSANOV_FLUX
+  // Compute the estimate of the maximum eigenvalue for CFL condition
+  //
+  template<std::size_t dim>
+  double Relaxation<dim>::get_max_lambda() const {
+    double res = 0.0;
 
-// Compute the estimate of the maximum eigenvalue for CFL condition
-//
-template<std::size_t dim>
-double Relaxation<dim>::get_max_lambda() const {
-  double res = 0.0;
+    samurai::for_each_cell(mesh,
+                           [&](const auto& cell)
+                           {
+                             res = std::max(std::max(std::abs(vel1[cell]) + c1[cell],
+                                                     std::abs(vel2[cell]) + c2[cell]),
+                                            res);
+                           });
 
-  samurai::for_each_cell(mesh,
-                         [&](const auto& cell)
-                         {
-                           res = std::max(std::max(std::abs(vel1[cell]) + c1[cell],
-                                                   std::abs(vel2[cell]) + c2[cell]),
-                                          res);
-                         });
-
-  return res;
-}
+    return res;
+  }
+#endif
 
 
 // Update auxiliary fields after solution of the system
@@ -524,6 +572,9 @@ void Relaxation<dim>::update_auxiliary_fields() {
 
                            vel[cell] = conserved_variables[cell][ALPHA1_RHO1_INDEX]/rho[cell]*vel1[cell]
                                      + conserved_variables[cell][ALPHA2_RHO2_INDEX]/rho[cell]*vel2[cell];
+
+                           alpha2[cell] = 1.0 - conserved_variables[cell][ALPHA1_INDEX];
+                           Y2[cell]     = conserved_variables[cell][ALPHA2_RHO2_INDEX]/rho[cell];
                          });
 }
 
@@ -558,51 +609,65 @@ template<std::size_t dim>
 void Relaxation<dim>::run() {
   // Default output arguemnts
   fs::path path        = fs::current_path();
-  std::string filename = "Relaxation_Rusanov";
+  #ifdef SULICIU_RELAXATION
+    std::string filename = "Relaxation_Suliciu";
+  #elifdef RUSANOV_FLUX
+    std::string filename = "Relaxation_Rusanov";
+  #endif
   const double dt_save = Tf / static_cast<double>(nfiles);
 
   // Auxiliary variables to save updated fields
   auto conserved_variables_np1 = samurai::make_field<double, EquationData::NVARS>("conserved_np1", mesh);
 
   // Create the flux variables
-  auto Rusanov_flux         = numerical_flux_cons.make_flux();
-  auto NonConservative_flux = numerical_flux_non_cons.make_flux();
+  #ifdef SULICIU_RELAXATION
+    double c = 0.0;
+    auto Suliciu_flux = numerical_flux.make_flux(c);
+  #elifdef RUSANOV_FLUX
+    auto Rusanov_flux         = numerical_flux_cons.make_flux();
+    auto NonConservative_flux = numerical_flux_non_cons.make_flux();
+  #endif
 
   // Save the initial condition
   const std::string suffix_init = (nfiles != 1) ? "_ite_0" : "";
-  save(path, filename, suffix_init, conserved_variables, rho, p, vel, vel1, rho1, p1, c1, vel2, rho2, p2, c2);
+  save(path, filename, suffix_init, conserved_variables, rho, p, vel, vel1, rho1, p1, c1, vel2, rho2, p2, c2, alpha2, Y2);
 
-  // Set initial time step
+  // Set mesh size
   using mesh_id_t = typename decltype(mesh)::mesh_id_t;
-  double dx = samurai::cell_length(mesh[mesh_id_t::cells].max_level());
-  double dt = cfl*dx/get_max_lambda();
+  const double dx = samurai::cell_length(mesh[mesh_id_t::cells].max_level());
 
   // Start the loop
   std::size_t nsave = 0;
   std::size_t nt    = 0;
   double t          = 0.0;
   while(t != Tf) {
-    t += dt;
-    if(t > Tf) {
-      dt += Tf - t;
-      t = Tf;
-    }
-
-    std::cout << fmt::format("Iteration {}: t = {}, dt = {}", ++nt, t, dt) << std::endl;
-
     // Apply the numerical scheme
     samurai::update_ghost_mr(conserved_variables);
     samurai::update_bc(conserved_variables);
-    auto Cons_Flux    = Rusanov_flux(conserved_variables);
-    auto NonCons_Flux = NonConservative_flux(conserved_variables);
-    conserved_variables_np1 = conserved_variables - dt*Cons_Flux - dt*NonCons_Flux;
+    #ifdef SULICIU_RELAXATION
+      auto Relaxation_Flux = Suliciu_flux(conserved_variables);
+      const double dt = std::min(Tf - t, cfl*dx/c);
+      t += dt;
+      std::cout << fmt::format("Iteration {}: t = {}, dt = {}", ++nt, t, dt) << std::endl;
+      conserved_variables_np1 = conserved_variables - dt*Relaxation_Flux;
+    #elifdef RUSANOV_FLUX
+      auto Cons_Flux    = Rusanov_flux(conserved_variables);
+      auto NonCons_Flux = NonConservative_flux(conserved_variables);
+      if(nt > 0 && !(t >= static_cast<double>(nsave + 1) * dt_save || t == Tf)) {
+        update_auxiliary_fields();
+      }
+      const double dt = std::min(Tf - t, cfl*dx/get_max_lambda());
+      t += dt;
+      std::cout << fmt::format("Iteration {}: t = {}, dt = {}", ++nt, t, dt) << std::endl;
+      conserved_variables_np1 = conserved_variables - dt*Cons_Flux - dt*NonCons_Flux;
+    #endif
 
     std::swap(conserved_variables.array(), conserved_variables_np1.array());
 
     // Apply the relaxation for the velocity
     if(apply_velocity_relax) {
       update_velocity_before_relaxation();
-      apply_instantaneous_velocity_relxation();
+      apply_instantaneous_velocity_relaxation();
 
       if(apply_pressure_relax) {
         // Apply the relaxation for the pressure
@@ -611,15 +676,12 @@ void Relaxation<dim>::run() {
       }
     }
 
-    // Compute updated time step
-    update_auxiliary_fields();
-    dx = samurai::cell_length(mesh[mesh_id_t::cells].max_level());
-    dt = std::min(dt, cfl*dx/get_max_lambda());
-
     // Save the results
     if(t >= static_cast<double>(nsave + 1) * dt_save || t == Tf) {
+      update_auxiliary_fields();
+
       const std::string suffix = (nfiles != 1) ? fmt::format("_ite_{}", ++nsave) : "";
-      save(path, filename, suffix, conserved_variables, rho, p, vel, vel1, rho1, p1, c1, vel2, rho2, p2, c2);
+      save(path, filename, suffix, conserved_variables, rho, p, vel, vel1, rho1, p1, c1, vel2, rho2, p2, c2, alpha2, Y2);
     }
   }
 }
