@@ -266,11 +266,23 @@ namespace samurai {
     const auto rhoR = qR(ALPHA1_RHO1_INDEX) + qR(ALPHA2_RHO2_INDEX);
     const auto velR = qR(RHO_U_INDEX + curr_d)/rhoR;
 
+    // Pressure phase 1 left state
+    const auto alpha1L = qL(ALPHA1_INDEX);
+    const auto rho1L   = qL(ALPHA1_RHO1_INDEX)/alpha1L; /*--- TODO: Add treatment for vanishing volume fraction ---*/
+    const auto e1L     = qL(ALPHA1_RHO1_E1_INDEX)/qL(ALPHA1_RHO1_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+    const auto p1L     = this->phase1.pres_value(rho1L, e1L);
+
     // Pressure phase 1 right state
     const auto alpha1R = qR(ALPHA1_INDEX);
     const auto rho1R   = qR(ALPHA1_RHO1_INDEX)/alpha1R; /*--- TODO: Add treatment for vanishing volume fraction ---*/
     const auto e1R     = qR(ALPHA1_RHO1_E1_INDEX)/qR(ALPHA1_RHO1_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
     const auto p1R     = this->phase1.pres_value(rho1R, e1R);
+
+    // Pressure phase 2 left state
+    const auto alpha2L = 1.0 - alpha1L;
+    const auto rho2L   = qL(ALPHA2_RHO2_INDEX)/alpha2L; /*--- TODO: Add treatment for vanishing volume fraction ---*/
+    const auto e2L     = qL(ALPHA2_RHO2_E2_INDEX)/qL(ALPHA2_RHO2_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+    const auto p2L     = this->phase2.pres_value(rho2L, e2L);
 
     // Pressure phase 2 right state
     const auto alpha2R = 1.0 - alpha1R;
@@ -278,12 +290,15 @@ namespace samurai {
     const auto e2R     = qR(ALPHA2_RHO2_E2_INDEX)/qR(ALPHA2_RHO2_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
     const auto p2R     = this->phase2.pres_value(rho2R, e2R);
 
-    // Build the non conservative flux (a lot of approximations to be checked here)
-    res(ALPHA1_INDEX) = -0.5*velR*qL(ALPHA1_INDEX);
+    // Build the non conservative flux (Bassi-Rebay formulation)
+    res(ALPHA1_INDEX) = (0.5*(velL*qL(ALPHA1_INDEX) + velR*qR(ALPHA1_INDEX)) -
+                         0.5*(velL + velR)*qL(ALPHA1_INDEX));
 
-    res(ALPHA1_RHO1_E1_INDEX) = -0.5*alpha1R*p1R*velL;
+    res(ALPHA1_RHO1_E1_INDEX) = (0.5*(alpha1L*p1L*velL + alpha1R*p1R*velR) -
+                                 0.5*(alpha1L*p1L + alpha1R*p1R)*velL);
 
-    res(ALPHA2_RHO2_E2_INDEX) = -0.5*alpha2R*p2R*velL;
+    res(ALPHA2_RHO2_E2_INDEX) = (0.5*(alpha2L*p2L*velL + alpha2R*p1R*velR) -
+                                 0.5*(alpha2L*p2L + alpha1R*p2R)*velL);
 
     return res;
   }
@@ -318,18 +333,33 @@ namespace samurai {
     const auto e1L     = qL(ALPHA1_RHO1_E1_INDEX)/qL(ALPHA1_RHO1_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
     const auto p1L     = this->phase1.pres_value(rho1L, e1L);
 
+    // Pressure phase 1 right state
+    const auto alpha1R = qR(ALPHA1_INDEX);
+    const auto rho1R   = qR(ALPHA1_RHO1_INDEX)/alpha1R; /*--- TODO: Add treatment for vanishing volume fraction ---*/
+    const auto e1R     = qR(ALPHA1_RHO1_E1_INDEX)/qR(ALPHA1_RHO1_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+    const auto p1R     = this->phase1.pres_value(rho1R, e1R);
+
     // Pressure phase 2 left state
     const auto alpha2L = 1.0 - alpha1L;
     const auto rho2L   = qL(ALPHA2_RHO2_INDEX)/alpha2L; /*--- TODO: Add treatment for vanishing volume fraction ---*/
     const auto e2L     = qL(ALPHA2_RHO2_E2_INDEX)/qL(ALPHA2_RHO2_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
     const auto p2L     = this->phase2.pres_value(rho2L, e2L);
 
-    // Build the non conservative flux (a lot of approximations to be checked here)
-    res(ALPHA1_INDEX) = 0.5*velL*qR(ALPHA1_INDEX);
+    // Pressure phase 2 right state
+    const auto alpha2R = 1.0 - alpha1R;
+    const auto rho2R   = qR(ALPHA2_RHO2_INDEX)/alpha2R; /*--- TODO: Add treatment for vanishing volume fraction ---*/
+    const auto e2R     = qR(ALPHA2_RHO2_E2_INDEX)/qR(ALPHA2_RHO2_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+    const auto p2R     = this->phase2.pres_value(rho2R, e2R);
 
-    res(ALPHA1_RHO1_E1_INDEX) = 0.5*alpha1L*p1L*velR;
+    // Build the non conservative flux (Bassi-Rebay formulation)
+    res(ALPHA1_INDEX) = -(0.5*(velL*qL(ALPHA1_INDEX) + velR*qR(ALPHA1_INDEX)) -
+                          0.5*(velL + velR)*qR(ALPHA1_INDEX));
 
-    res(ALPHA2_RHO2_E2_INDEX) = 0.5*alpha2L*p2L*velR;
+    res(ALPHA1_RHO1_E1_INDEX) = -(0.5*(alpha1L*p1L*velL + alpha1R*p1R*velR) -
+                                  0.5*(alpha1L*p1L + alpha1R*p1R)*velR);
+
+    res(ALPHA2_RHO2_E2_INDEX) = -(0.5*(alpha2L*p2L*velL + alpha2R*p1R*velR) -
+                                  0.5*(alpha2L*p2L + alpha1R*p2R)*velR);
 
     return res;
   }
@@ -357,8 +387,8 @@ namespace samurai {
                                               const auto& qR = field[right];
 
                                               samurai::FluxValuePair<typename Flux<Field>::cfg> flux;
-                                              flux[0] = compute_discrete_flux_right_left(qL, qR, d);
-                                              flux[1] = compute_discrete_flux_left_right(qL, qR, d);
+                                              flux[0] = compute_discrete_flux_left_right(qL, qR, d);
+                                              flux[1] = compute_discrete_flux_right_left(qL, qR, d);
 
                                               return flux;
                                             };

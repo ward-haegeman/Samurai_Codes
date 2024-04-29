@@ -449,21 +449,17 @@ void Relaxation<dim>::run() {
   const std::string suffix_init = (nfiles != 1) ? "_ite_0" : "";
   save(path, filename, suffix_init, conserved_variables, rho, p, vel, c, rho1, p1, c1, rho2, p2, c2, alpha2, Y2);
 
-  // Set initial time step
+  // Save mesh size
   using mesh_id_t = typename decltype(mesh)::mesh_id_t;
-  double dx = samurai::cell_length(mesh[mesh_id_t::cells].max_level());
-  double dt = cfl*dx/get_max_lambda();
+  const double dx = samurai::cell_length(mesh[mesh_id_t::cells].max_level());
 
   // Start the loop
   std::size_t nsave = 0;
   std::size_t nt    = 0;
   double t          = 0.0;
+  double dt         = std::min(Tf - t, cfl*dx/get_max_lambda());
   while(t != Tf) {
     t += dt;
-    if(t > Tf) {
-      dt += Tf - t;
-      t = Tf;
-    }
 
     std::cout << fmt::format("Iteration {}: t = {}, dt = {}", ++nt, t, dt) << std::endl;
 
@@ -484,8 +480,7 @@ void Relaxation<dim>::run() {
 
     // Compute updated time step
     update_auxiliary_fields();
-    dx = samurai::cell_length(mesh[mesh_id_t::cells].max_level());
-    dt = std::min(dt, cfl*dx/get_max_lambda());
+    dt = std::min(Tf - t, cfl*dx/get_max_lambda());
 
     // Save the results
     if(t >= static_cast<double>(nsave + 1) * dt_save || t == Tf) {
