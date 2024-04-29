@@ -3,8 +3,8 @@
 // license that can be found in the LICENSE file.
 //
 //#define FULL_BN
-//#define TOT_ENERGY_6EQS
-#define INT_ENERGY_6EQS
+#define TOT_ENERGY_6EQS
+//#define INT_ENERGY_6EQS
 
 #ifdef FULL_BN
   #include "relaxation.hpp"

@@ -277,14 +277,17 @@ namespace samurai {
       res(RHO_U_INDEX + d) = 0.0;
     }
 
+    // Compute velocity and mass fractions left state
+    const auto rhoL = qL(ALPHA1_RHO1_INDEX) + qL(ALPHA2_RHO2_INDEX);
+    const auto Y1L  = qL(ALPHA1_RHO1_INDEX)/rhoL;
+    const auto Y2L  = qL(ALPHA2_RHO2_INDEX)/rhoL;
+    const auto velL = qL(RHO_U_INDEX + curr_d)/rhoL;
+
     // Compute velocity and mass fractions right state
     const auto rhoR = qR(ALPHA1_RHO1_INDEX) + qR(ALPHA2_RHO2_INDEX);
     const auto Y1R  = qR(ALPHA1_RHO1_INDEX)/rhoR;
     const auto Y2R  = qR(ALPHA2_RHO2_INDEX)/rhoR;
     const auto velR = qR(RHO_U_INDEX + curr_d)/rhoR;
-
-    // Compute mixture density left state
-    const auto rhoL = qL(ALPHA1_RHO1_INDEX) + qL(ALPHA2_RHO2_INDEX);
 
     // Pressure phase 1 left state
     const auto alpha1L = qL(ALPHA1_INDEX);
@@ -323,9 +326,13 @@ namespace samurai {
     const auto p2R     = this->phase2.pres_value(rho2R, e2R);
 
     // Build the non conservative flux (a lot of approximations to be checked here)
-    res(ALPHA1_INDEX) = -0.5*velR*qL(ALPHA1_INDEX);
+    res(ALPHA1_INDEX) = (0.5*(velL*qL(ALPHA1_INDEX) + velR*qR(ALPHA1_INDEX)) -
+                         0.5*(velL + velR)*qL(ALPHA1_INDEX));
 
-    res(ALPHA1_RHO1_E1_INDEX) = 0.5*velR*((Y2R*p1R + Y1R*p2R)*alpha1L + alpha1R*Y2R*p1L - alpha2R*Y1R*p2L);
+    res(ALPHA1_RHO1_E1_INDEX) = -(0.5*(velL*Y2L*alpha1L*p1L + velR*Y2R*alpha1R*p1R) -
+                                  0.5*(velL*Y2L + velR*Y2R)*alpha1L*p1L)
+                                +(0.5*(velL*Y1L*alpha2L*p2L + velR*Y1R*alpha2R*p2R) -
+                                  0.5*(velL*Y1L + velR*Y1R)*alpha2L*p2L);
 
     res(ALPHA2_RHO2_E2_INDEX) = -res(ALPHA1_RHO1_E1_INDEX);
 
@@ -354,8 +361,11 @@ namespace samurai {
     const auto Y2L  = qL(ALPHA2_RHO2_INDEX)/rhoL;
     const auto velL = qL(RHO_U_INDEX + curr_d)/rhoL;
 
-    // Compute mixture density right state
+    // Compute velocity and mass fractions right state
     const auto rhoR = qR(ALPHA1_RHO1_INDEX) + qR(ALPHA2_RHO2_INDEX);
+    const auto Y1R  = qR(ALPHA1_RHO1_INDEX)/rhoR;
+    const auto Y2R  = qR(ALPHA2_RHO2_INDEX)/rhoR;
+    const auto velR = qR(RHO_U_INDEX + curr_d)/rhoR;
 
     // Pressure phase 1 left state
     const auto alpha1L = qL(ALPHA1_INDEX);
@@ -393,10 +403,14 @@ namespace samurai {
     }
     const auto p2R     = this->phase2.pres_value(rho2R, e2R);
 
-    // Build the non conservative flux (a lot of approximations to be checked here)
-    res(ALPHA1_INDEX) = 0.5*velL*qR(ALPHA1_INDEX);
+    // Build the non conservative flux (Bassi-Rebay formulation)
+    res(ALPHA1_INDEX) = -(0.5*(velL*qL(ALPHA1_INDEX) + velR*qR(ALPHA1_INDEX)) -
+                          0.5*(velL + velR)*qR(ALPHA1_INDEX));
 
-    res(ALPHA1_RHO1_E1_INDEX) = -0.5*velL*((Y2L*p1L + Y1L*p2L)*alpha1R + alpha1L*Y2L*p1R - alpha2L*Y1L*p2R);
+    res(ALPHA1_RHO1_E1_INDEX) = (0.5*(velL*Y2L*alpha1L*p1L + velR*Y2R*alpha1R*p1R) -
+                                 0.5*(velL*Y2L + velR*Y2R)*alpha1R*p1R)
+                                -(0.5*(velL*Y1L*alpha2L*p2L + velR*Y1R*alpha2R*p2R) -
+                                  0.5*(velL*Y1L + velR*Y1R)*alpha2R*p2R);
 
     res(ALPHA2_RHO2_E2_INDEX) = -res(ALPHA1_RHO1_E1_INDEX);
 
@@ -426,8 +440,8 @@ namespace samurai {
                                               const auto& qR = field[right];
 
                                               samurai::FluxValuePair<typename Flux<Field>::cfg> flux;
-                                              flux[0] = compute_discrete_flux_right_left(qL, qR, d);
-                                              flux[1] = compute_discrete_flux_left_right(qL, qR, d);
+                                              flux[0] = compute_discrete_flux_left_right(qL, qR, d);
+                                              flux[1] = compute_discrete_flux_right_left(qL, qR, d);
 
                                               return flux;
                                             };
