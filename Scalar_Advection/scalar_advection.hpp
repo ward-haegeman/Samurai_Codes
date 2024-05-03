@@ -25,7 +25,7 @@ using namespace EquationData;
 template<std::size_t dim>
 class Advection {
 public:
-  using Config = samurai::MRConfig<dim>;
+  using Config = samurai::MRConfig<dim, 2>;
 
   Advection() = default; // Default constructor. This will do nothing
                          // and basically will never be used
@@ -60,7 +60,7 @@ private:
 
   Field q; // The variable which stores the advected field
 
-  samurai::Advection_Flux<Field> numerical_flux; // Variable to compute the numerical flux
+  samurai::Advection_Flux_Cons<Field> numerical_flux; // Variable to compute the numerical flux
 
   Field_Vect vel;
 

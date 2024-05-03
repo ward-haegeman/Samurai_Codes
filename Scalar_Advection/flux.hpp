@@ -163,7 +163,7 @@ namespace samurai {
     static constexpr std::size_t field_size        = Field::size;
     static_assert(Field::dim == EquationData::dim, "The spatial dimesions do not match");
     static constexpr std::size_t output_field_size = field_size;
-    static constexpr std::size_t stencil_size      = 2;
+    static constexpr std::size_t stencil_size      = 4;
 
     using cfg = FluxConfig<SchemeType::NonLinear, output_field_size, stencil_size, Field>;
 
@@ -241,12 +241,45 @@ namespace samurai {
         // Compute now the "discrete" flux function
         discrete_flux[d].cons_flux_function = [&](auto& cells, const Field& field)
                                               {
-                                                const auto& left  = cells[0];
+                                                /*const auto& left  = cells[0];
                                                 const auto& right = cells[1];
 
                                                 const auto& qL = field[left];
-                                                const auto& qR = field[right];
+                                                const auto& qR = field[right];*/
 
+                                                const auto& left_left   = cells[0];
+                                                const auto& left        = cells[1];
+                                                const auto& right       = cells[2];
+                                                const auto& right_right = cells[3];
+
+                                                auto qL = field[left];
+                                                auto qR = field[right];
+                                                const double beta = 1.0;
+                                                if(field[right] - field[left] > 0.0) {
+                                                  qL += 0.5*std::max(0.0, std::max(std::min(beta*(field[left] - field[left_left]),
+                                                                                                  field[right] - field[left]),
+                                                                                         std::min(field[left] - field[left_left],
+                                                                                                  beta*(field[right] - field[left]))));
+                                                }
+                                                else if(field[right] - field[left] < 0.0) {
+                                                  qL += 0.5*std::min(0.0, std::min(std::max(beta*(field[left] - field[left_left]),
+                                                                                                  field[right] - field[left]),
+                                                                                         std::max(field[left] - field[left_left],
+                                                                                                  beta*(field[right] - field[left]))));
+                                                }
+                                                if(field[right_right] - field[right] > 0.0) {
+                                                  qR -= 0.5*std::max(0.0, std::max(std::min(beta*(field[right] - field[left]),
+                                                                                                  field[right_right] - field[right]),
+                                                                                         std::min(field[right] - field[left],
+                                                                                                  beta*(field[right_right] - field[right]))));
+                                                }
+                                                else if(field[right_right] - field[right] < 0.0) {
+                                                  qR -= 0.5*std::min(0.0, std::min(std::max(beta*(field[right] - field[left]),
+                                                                                                  field[right_right] - field[right]),
+                                                                                         std::max(field[right] - field[left],
+                                                                                                  beta*(field[right_right] - field[right]))));
+                                                }
+                                                
                                                 const auto& vel_L = vel[left];
                                                 const auto& vel_R = vel[right];
 
