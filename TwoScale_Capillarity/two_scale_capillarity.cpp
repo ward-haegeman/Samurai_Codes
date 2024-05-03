@@ -21,7 +21,7 @@ int main(int argc, char* argv[]) {
 
   bool apply_relaxation = true;
 
-  bool mass_transfer = true;
+  bool mass_transfer = false;
 
   // Output parameters
   std::size_t nfiles = 20;

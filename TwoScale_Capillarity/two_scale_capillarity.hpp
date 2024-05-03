@@ -27,7 +27,7 @@ using namespace EquationData;
 template<std::size_t dim>
 class TwoScaleCapillarity {
 public:
-  using Config = samurai::MRConfig<dim>;
+  using Config = samurai::MRConfig<dim, 2>;
 
   TwoScaleCapillarity() = default; // Default constructor. This will do nothing
                                    // and basically will never be used
@@ -325,7 +325,7 @@ void TwoScaleCapillarity<dim>::apply_relaxation() {
                            // Sanity check for rho_alpha1_bar
                            if(conserved_variables[cell][RHO_ALPHA1_BAR_INDEX] < 0.0) {
                              if(conserved_variables[cell][RHO_ALPHA1_BAR_INDEX] < -1e-10) {
-                               std::cerr << " Negative large-scale mass phaase 1 at the beginning of the relaxation" << std::endl;
+                               std::cerr << " Negative large-scale mass phase 1 at the beginning of the relaxation" << std::endl;
                                exit(1);
                              }
                              conserved_variables[cell][RHO_ALPHA1_BAR_INDEX] = 0.0;
