@@ -209,32 +209,32 @@ void Relaxation<dim>::init_variables() {
   alpha2 = samurai::make_field<double, 1>("alpha2", mesh);
   Y2     = samurai::make_field<double, 1>("Y2", mesh);
 
-  const double xd = 0.5;
+  const double xd = 0.75;
 
   // Initialize the fields with a loop over all cells
-  const double alpha1L = 1.0 - 1e-2;
+  const double alpha1L = 1.0 - 1e-6;
 
-  const double vel1L   = -2.0;
-  const double p1L     = 1e5;
-  const double rho1L   = 1150.0;
+  const double vel1L   = 0.0;
+  const double p1L     = 1e9;
+  const double rho1L   = 1000.0;
 
   const double alpha2L = 1.0 - alpha1L;
 
-  const double vel2L   = -2.0;
-  const double p2L     = 1e5;
-  const double rho2L   = 0.63;
+  const double vel2L   = 0.0;
+  const double p2L     = 1e9;
+  const double rho2L   = 1.0;
 
-  const double alpha1R = alpha1L;
+  const double alpha1R = 1.0 - alpha1L;
 
-  const double vel1R   = 2.0;
+  const double vel1R   = 0.0;
   const double p1R     = 1e5;
-  const double rho1R   = 1150.0;
+  const double rho1R   = 1000.0;
 
   const double alpha2R = 1.0 - alpha1R;
 
-  const double vel2R   = 2.0;
+  const double vel2R   = 0.0;
   const double p2R     = 1e5;
-  const double rho2R   = 0.63;
+  const double rho2R   = 1.0;
 
   samurai::for_each_cell(mesh,
                          [&](const auto& cell)
@@ -645,6 +645,7 @@ void Relaxation<dim>::run() {
     samurai::update_ghost_mr(conserved_variables);
     samurai::update_bc(conserved_variables);
     #ifdef SULICIU_RELAXATION
+      c = 0.0;
       auto Relaxation_Flux = Suliciu_flux(conserved_variables);
       const double dt = std::min(Tf - t, cfl*dx/c);
       t += dt;

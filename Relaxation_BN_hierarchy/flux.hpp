@@ -22,11 +22,11 @@ namespace EquationData {
   static constexpr std::size_t NVARS = ALPHA2_RHO2_E2_INDEX + 1;
 
   // Parameters related to the EOS for the two phases
-  static constexpr double gamma_1    = 2.35;
-  static constexpr double pi_infty_1 = 1e9;
+  static constexpr double gamma_1    = 4.4;
+  static constexpr double pi_infty_1 = 6e8;
   static constexpr double q_infty_1  = 0.0;
 
-  static constexpr double gamma_2    = 1.43;
+  static constexpr double gamma_2    = 1.4;
   static constexpr double pi_infty_2 = 0.0;
   static constexpr double q_infty_2  = 0.0;
 }
@@ -533,7 +533,7 @@ namespace samurai {
     while(rhs - inf <= mu*(sup - inf) || sup - rhs <= mu*(sup - inf)) {
       if(vel1_diesis - a1*tau1L_diesis > vel2_diesis - a2*tau2L_diesis &&
          vel1_diesis + a1*tau1R_diesis < vel2_diesis + a2*tau2R_diesis) {
-        a1	*= a1;
+        a1	*= fact;
         vel1_diesis	 = 0.5*(vel1L_d + vel1R_d) - 0.5/a1*(p1R - p1L);
         p1_diesis	   = 0.5*(p1R + p1L) - 0.5*a1*(vel1R_d - vel1L_d);
         tau1L_diesis = 1.0/rho1L + 1.0/a1*(vel1_diesis - vel1L_d);
@@ -542,20 +542,20 @@ namespace samurai {
       else {
         if(vel2_diesis - a2*tau2L_diesis > vel1_diesis - a1*tau1L_diesis &&
            vel2_diesis + a2*tau2R_diesis < vel1_diesis + a1*tau1R_diesis) {
-          a2	*= 1.01;
+          a2	*= fact;
           vel2_diesis	 = 0.5*(vel2L_d + vel2R_d) - 0.5/a2*(p2R - p2L);
           p2_diesis	   = 0.5*(p2R + p2L) - 0.5*a2*(vel2R_d - vel2L_d);
           tau2L_diesis = 1.0/rho2L + 1.0/a2*(vel2_diesis - vel2L_d);
           tau2R_diesis = 1.0/rho2R - 1.0/a2*(vel2_diesis - vel2R_d);
         }
         else {
-          a1 *= 1.01;
+          a1 *= fact;
           vel1_diesis	 = 0.5*(vel1L_d + vel1R_d) - 0.5/a1*(p1R - p1L);
           p1_diesis	   = 0.5*(p1R + p1L) - 0.5*a1*(vel1R_d - vel1L_d);
           tau1L_diesis = 1.0/rho1L + 1.0/a1*(vel1_diesis - vel1L_d);
           tau1R_diesis = 1.0/rho1R - 1.0/a1*(vel1_diesis - vel1R_d);
 
-          a2 *= 1.01;
+          a2 *= fact;
           vel2_diesis	 = 0.5*(vel2L_d + vel2R_d) - 0.5/a2*(p2R - p2L);
           p2_diesis	   = 0.5*(p2R + p2L) - 0.5*a2*(vel2R_d - vel2L_d);
           tau2L_diesis = 1.0/rho2L + 1.0/a2*(vel2_diesis - vel2L_d);
@@ -769,25 +769,45 @@ namespace samurai {
       return vel1_diesis;
     }
     else {
+      /*double u_max = sup;
+      double u_min = inf;*/
+
       unsigned int iter = 0;
       const T xl = std::max(vel1_diesis - a1*tau1L_diesis, vel2_diesis - a2*tau2L_diesis);
       const T xr = std::min(vel1_diesis + a1*tau1R_diesis, vel2_diesis + a2*tau2R_diesis);
 
       T u_star = 0.5*(xl + xr);
 
-      while(iter < 1000 &&
+      T du = -(Psi(u_star, a1, alpha1L, alpha1R, vel1_diesis,
+                           a2, alpha2L, alpha2R, vel2_diesis, tau2L_diesis, tau2R_diesis) - rhs)/
+              (dPsi_dustar(u_star, a1, alpha1L, alpha1R,
+                                   a2, alpha2L, alpha2R, vel2_diesis, tau2L_diesis, tau2R_diesis));
+
+      while(iter < 50 &&
             std::abs(Psi(u_star, a1, alpha1L, alpha1R, vel1_diesis,
-                                 a2, alpha2L, alpha2R, vel2_diesis, tau2L_diesis, tau2R_diesis) - rhs) > eps) {
+                                 a2, alpha2L, alpha2R, vel2_diesis, tau2L_diesis, tau2R_diesis) - rhs) > eps &&
+            std::abs(du) > eps) {
         ++iter;
 
-        u_star -= (Psi(u_star, a1, alpha1L, alpha1R, vel1_diesis,
-                               a2, alpha2L, alpha2R, vel2_diesis, tau2L_diesis, tau2R_diesis) - rhs)/
-                  (dPsi_dustar(u_star, a1, alpha1L, alpha1R,
-                                       a2, alpha2L, alpha2R, vel2_diesis, tau2L_diesis, tau2R_diesis));
+        /*if(du > 0.0) {
+            du = max(du, 0.9*(u_max - u_star));
+            u_min = u_star;
+          }
+        else if(du < 0.0) {
+          du = max(du, 0.9*(u_min - u_star));
+          u_max = u_star;
+        }*/
+
+        u_star += du;
+
+        du = -(Psi(u_star, a1, alpha1L, alpha1R, vel1_diesis,
+                           a2, alpha2L, alpha2R, vel2_diesis, tau2L_diesis, tau2R_diesis) - rhs)/
+              (dPsi_dustar(u_star, a1, alpha1L, alpha1R,
+                                   a2, alpha2L, alpha2R, vel2_diesis, tau2L_diesis, tau2R_diesis));
       }
 
       // Safety check
-      if(iter == 1000) {
+      if(iter == 50) {
         std::cout << "Newton method not converged." << std::endl;
         exit(0);
       }

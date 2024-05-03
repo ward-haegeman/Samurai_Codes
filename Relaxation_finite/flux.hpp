@@ -533,7 +533,7 @@ namespace samurai {
     while(rhs - inf <= mu*(sup - inf) || sup - rhs <= mu*(sup - inf)) {
       if(vel1_diesis - a1*tau1L_diesis > vel2_diesis - a2*tau2L_diesis &&
          vel1_diesis + a1*tau1R_diesis < vel2_diesis + a2*tau2R_diesis) {
-        a1	*= a1;
+        a1	*= fact;
         vel1_diesis	 = 0.5*(vel1L_d + vel1R_d) - 0.5/a1*(p1R - p1L);
         p1_diesis	   = 0.5*(p1R + p1L) - 0.5*a1*(vel1R_d - vel1L_d);
         tau1L_diesis = 1.0/rho1L + 1.0/a1*(vel1_diesis - vel1L_d);
@@ -542,20 +542,20 @@ namespace samurai {
       else {
         if(vel2_diesis - a2*tau2L_diesis > vel1_diesis - a1*tau1L_diesis &&
            vel2_diesis + a2*tau2R_diesis < vel1_diesis + a1*tau1R_diesis) {
-          a2	*= 1.01;
+          a2	*= fact;
           vel2_diesis	 = 0.5*(vel2L_d + vel2R_d) - 0.5/a2*(p2R - p2L);
           p2_diesis	   = 0.5*(p2R + p2L) - 0.5*a2*(vel2R_d - vel2L_d);
           tau2L_diesis = 1.0/rho2L + 1.0/a2*(vel2_diesis - vel2L_d);
           tau2R_diesis = 1.0/rho2R - 1.0/a2*(vel2_diesis - vel2R_d);
         }
         else {
-          a1 *= 1.01;
+          a1 *= fact;
           vel1_diesis	 = 0.5*(vel1L_d + vel1R_d) - 0.5/a1*(p1R - p1L);
           p1_diesis	   = 0.5*(p1R + p1L) - 0.5*a1*(vel1R_d - vel1L_d);
           tau1L_diesis = 1.0/rho1L + 1.0/a1*(vel1_diesis - vel1L_d);
           tau1R_diesis = 1.0/rho1R - 1.0/a1*(vel1_diesis - vel1R_d);
 
-          a2 *= 1.01;
+          a2 *= fact;
           vel2_diesis	 = 0.5*(vel2L_d + vel2R_d) - 0.5/a2*(p2R - p2L);
           p2_diesis	   = 0.5*(p2R + p2L) - 0.5*a2*(vel2R_d - vel2L_d);
           tau2L_diesis = 1.0/rho2L + 1.0/a2*(vel2_diesis - vel2L_d);

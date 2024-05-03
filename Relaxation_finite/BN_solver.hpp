@@ -16,8 +16,8 @@ namespace fs = std::filesystem;
 
 #include <samurai/mr/adapt.hpp>
 
-//#define SULICIU_RELAXATION
-#define RUSANOV_FLUX
+#define SULICIU_RELAXATION
+//#define RUSANOV_FLUX
 
 // Specify the use of this namespace where we just store the indices
 // and some parameters related to the equations of state
@@ -336,6 +336,7 @@ void BN_Solver<dim>::run() {
     samurai::update_ghost_mr(conserved_variables);
     samurai::update_bc(conserved_variables);
     #ifdef SULICIU_RELAXATION
+      c = 0.0;
       auto Relaxation_Flux = Suliciu_flux(conserved_variables);
       const double dt = std::min(Tf - t, cfl*dx/c);
       t += dt;
