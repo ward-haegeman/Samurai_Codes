@@ -77,10 +77,18 @@ private:
                H,
                H_lim,
                dH,
-               rho;
+               rho,
+               alpha1_d,
+               mod_grad_alpha1_bar,
+               mod_grad_alpha1_d,
+               Dt_alpha1_d,
+               CV_alpha1_d,
+               div_vel;
 
   Field_Vect normal,
-             grad_alpha1_bar;
+             grad_alpha1_bar,
+             grad_alpha1_d,
+             vel;
 
   using gradient_type = decltype(samurai::make_gradient_order2<decltype(alpha1_bar)>());
   gradient_type gradient;
@@ -141,10 +149,10 @@ void TwoScaleCapillarity<dim>::update_geometry() {
   samurai::for_each_cell(mesh,
                          [&](const auto& cell)
                          {
-                           const auto mod_grad_alpha1_bar = std::sqrt(xt::sum(grad_alpha1_bar[cell]*grad_alpha1_bar[cell])());
+                           mod_grad_alpha1_bar[cell] = std::sqrt(xt::sum(grad_alpha1_bar[cell]*grad_alpha1_bar[cell])());
 
-                           if(mod_grad_alpha1_bar > mod_grad_alpha1_bar_min) {
-                             normal[cell] = grad_alpha1_bar[cell]/mod_grad_alpha1_bar;
+                           if(mod_grad_alpha1_bar[cell] > mod_grad_alpha1_bar_min) {
+                             normal[cell] = grad_alpha1_bar[cell]/mod_grad_alpha1_bar[cell];
                            }
                            else {
                              for(std::size_t d = 0; d < dim; ++d) {
@@ -164,13 +172,22 @@ void TwoScaleCapillarity<dim>::init_variables() {
   // Create conserved and auxiliary fields
   conserved_variables = samurai::make_field<double, EquationData::NVARS>("conserved", mesh);
 
-  alpha1_bar      = samurai::make_field<double, 1>("alpha1_bar", mesh);
-  grad_alpha1_bar = samurai::make_field<double, dim>("grad_alpha1_bar", mesh);
-  normal          = samurai::make_field<double, dim>("normal", mesh);
-  H               = samurai::make_field<double, 1>("H", mesh);
-  H_lim           = samurai::make_field<double, 1>("Hlim", mesh);
-  dH              = samurai::make_field<double, 1>("dH", mesh);
-  rho             = samurai::make_field<double, 1>("rho", mesh);
+  alpha1_bar          = samurai::make_field<double, 1>("alpha1_bar", mesh);
+  grad_alpha1_bar     = samurai::make_field<double, dim>("grad_alpha1_bar", mesh);
+  normal              = samurai::make_field<double, dim>("normal", mesh);
+  H                   = samurai::make_field<double, 1>("H", mesh);
+  H_lim               = samurai::make_field<double, 1>("Hlim", mesh);
+  dH                  = samurai::make_field<double, 1>("dH", mesh);
+  rho                 = samurai::make_field<double, 1>("rho", mesh);
+  mod_grad_alpha1_bar = samurai::make_field<double, 1>("mod_grad_alpha1_bar", mesh);
+
+  alpha1_d            = samurai::make_field<double, 1>("alpha1_d", mesh);
+  grad_alpha1_d       = samurai::make_field<double, dim>("grad_alpha1_d", mesh);
+  mod_grad_alpha1_d   = samurai::make_field<double, 1>("mod_grad_alpha1_d", mesh);
+  vel                 = samurai::make_field<double, dim>("vel", mesh);
+  div_vel             = samurai::make_field<double, 1>("div_vel", mesh);
+  Dt_alpha1_d         = samurai::make_field<double, 1>("Dt_alpha1_d", mesh);
+  CV_alpha1_d         = samurai::make_field<double, 1>("CV_alpha1_d", mesh);
 
   // Declare some constant parameters associated to the grid and to the
   // initial state
@@ -213,6 +230,7 @@ void TwoScaleCapillarity<dim>::init_variables() {
                          {
                            // Set small-scale variables
                            conserved_variables[cell][ALPHA1_D_INDEX] = 0.0;
+                           alpha1_d[cell]                            = conserved_variables[cell][ALPHA1_D_INDEX];
                            conserved_variables[cell][SIGMA_D_INDEX]  = 0.0;
                            conserved_variables[cell][M1_D_INDEX]     = conserved_variables[cell][ALPHA1_D_INDEX]*EOS_phase1.get_rho0();
 
@@ -236,6 +254,16 @@ void TwoScaleCapillarity<dim>::init_variables() {
                            // Set momentum
                            conserved_variables[cell][RHO_U_INDEX]     = conserved_variables[cell][M1_INDEX]*U_1 + conserved_variables[cell][M2_INDEX]*U_0;
                            conserved_variables[cell][RHO_U_INDEX + 1] = rho[cell]*V;
+
+                           vel[cell][0] = conserved_variables[cell][RHO_U_INDEX]/rho[cell];
+                           vel[cell][1] = conserved_variables[cell][RHO_U_INDEX + 1]/rho[cell];
+                         });
+  grad_alpha1_d = gradient(alpha1_d);
+  div_vel       = divergence(vel);
+  samurai::for_each_cell(mesh,
+                         [&](const auto& cell)
+                         {
+                           mod_grad_alpha1_d[cell] = std::sqrt(xt::sum(grad_alpha1_d[cell]*grad_alpha1_d[cell])());
                          });
 
   // Apply bcs
@@ -591,22 +619,17 @@ void TwoScaleCapillarity<dim>::run() {
 
   // Save the initial condition
   const std::string suffix_init = (nfiles != 1) ? "_ite_0" : "";
-  save(path, filename, suffix_init, conserved_variables, alpha1_bar, grad_alpha1_bar, normal, H, H_lim, rho);
-
-  // Set initial time step
-  double dx = samurai::cell_length(mesh[mesh_id_t::cells].max_level());
-  double dt = cfl*dx/get_max_lambda();
+  save(path, filename, suffix_init, conserved_variables, alpha1_bar, grad_alpha1_bar, normal, H, H_lim, rho, mod_grad_alpha1_bar,
+                                    grad_alpha1_d, mod_grad_alpha1_d, vel, div_vel);
 
   // Start the loop
   std::size_t nsave = 0;
   std::size_t nt    = 0;
   double t          = 0.0;
+  double dx         = samurai::cell_length(mesh[mesh_id_t::cells].max_level());
+  double dt         = std::min(Tf - t, cfl*dx/get_max_lambda());
   while(t != Tf) {
     t += dt;
-    if(t > Tf) {
-      dt += Tf - t;
-      t = Tf;
-    }
 
     std::cout << fmt::format("Iteration {}: t = {}, dt = {}", ++nt, t, dt) << std::endl;
 
@@ -619,12 +642,14 @@ void TwoScaleCapillarity<dim>::run() {
     H.resize();
     H_lim.resize();
     rho.resize();
+    mod_grad_alpha1_bar.resize();
     update_geometry();
 
     // Apply the numerical scheme without relaxation
     samurai::update_ghost_mr(conserved_variables);
     samurai::update_bc(conserved_variables);
-    auto flux_conserved     = numerical_flux(conserved_variables);
+    auto flux_conserved = numerical_flux(conserved_variables);
+    conserved_variables_np1.resize();
     conserved_variables_np1 = conserved_variables - dt*flux_conserved;
 
     std::swap(conserved_variables.array(), conserved_variables_np1.array());
@@ -648,14 +673,48 @@ void TwoScaleCapillarity<dim>::run() {
     // Update geometry (after relaxation)
     update_geometry();
 
-    // Compute updated time step
-    dx = samurai::cell_length(mesh[mesh_id_t::cells].max_level());
-    dt = std::min(dt, cfl*dx/get_max_lambda());
-
     // Save the results
     if(t >= static_cast<double>(nsave + 1) * dt_save || t == Tf) {
+      // Compute small-scale geometric related quantities
+      alpha1_d.resize();
+      grad_alpha1_d.resize();
+      mod_grad_alpha1_d.resize();
+      vel.resize();
+      div_vel.resize();
+      Dt_alpha1_d.resize();
+      CV_alpha1_d.resize();
+
+      samurai::for_each_cell(mesh,
+                             [&](const auto& cell)
+                             {
+                               alpha1_d[cell] = conserved_variables[cell][ALPHA1_D_INDEX];
+
+                               vel[cell][0] = conserved_variables[cell][RHO_U_INDEX]/rho[cell];
+                               vel[cell][0] = conserved_variables[cell][RHO_U_INDEX + 1]/rho[cell];
+                             });
+
+      grad_alpha1_d = gradient(alpha1_d);
+      div_vel       = divergence(vel);
+
+      samurai::for_each_cell(mesh,
+                             [&](const auto& cell)
+                             {
+                               mod_grad_alpha1_d[cell] = std::sqrt(xt::sum(grad_alpha1_d[cell]*grad_alpha1_d[cell])());
+
+                               Dt_alpha1_d[cell] = (conserved_variables[cell][ALPHA1_D_INDEX] - conserved_variables_np1[cell][ALPHA1_D_INDEX])/dt
+                                                 + vel[cell][0]*grad_alpha1_d[cell][0] + vel[cell][1]*grad_alpha1_d[cell][1];
+
+                               CV_alpha1_d[cell] = Dt_alpha1_d[cell] + conserved_variables[cell][ALPHA1_D_INDEX]*div_vel[cell];
+                             });
+
+      // Perform saving
       const std::string suffix = (nfiles != 1) ? fmt::format("_ite_{}", ++nsave) : "";
-      save(path, filename, suffix, conserved_variables, alpha1_bar, grad_alpha1_bar, normal, H, H_lim, rho);
+      save(path, filename, suffix, conserved_variables, alpha1_bar, grad_alpha1_bar, normal, H, H_lim, rho, mod_grad_alpha1_bar,
+                                   grad_alpha1_d, mod_grad_alpha1_d, vel, div_vel, Dt_alpha1_d, CV_alpha1_d);
     }
+
+    // Compute updated time step
+    dx = samurai::cell_length(mesh[mesh_id_t::cells].max_level());
+    dt = std::min(Tf - t, cfl*dx/get_max_lambda());
   }
 }
