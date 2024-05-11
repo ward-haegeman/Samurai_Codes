@@ -46,7 +46,7 @@ namespace samurai {
     static_assert(field_size == EquationData::NVARS, "The number of elements in the state does not correpsond to the number of equations");
     static_assert(Field::dim == EquationData::dim, "The spatial dimesions do not match");
     static constexpr std::size_t output_field_size = field_size;
-    static constexpr std::size_t stencil_size      = 4;
+    static constexpr std::size_t stencil_size      = 2;
 
     using cfg = FluxConfig<SchemeType::NonLinear, output_field_size, stencil_size, Field>;
 
@@ -58,6 +58,11 @@ namespace samurai {
     FluxValue<cfg> evaluate_continuous_flux(const FluxValue<cfg>& q,
                                             const std::size_t curr_d,
                                             const auto& grad_alpha1_bar); // Evaluate the 'continuous' flux for the state q along direction curr_d
+
+    void perform_Newton_step_relaxation(auto conserved_variables, const auto H,
+                                        const auto rho, bool& relaxation_applied,
+                                        const double tol = 1e-8, const double lambda = 0.9); // Perform a Newton step relaxation for a state vector (it is not a real space dependent procedure,
+                                                                                             // but I need to be able to do it inside the flux location for MUSCL reconstruction)
 
   protected:
     const BarotropicEOS<>& phase1;
@@ -135,6 +140,77 @@ namespace samurai {
     }
 
     return res;
+  }
+
+  // Perform a Newton step relaxation for a single vector state (i.e. a single cell)
+  //
+  template<class Field>
+  void Flux<Field>::perform_Newton_step_relaxation(auto conserved_variables, const auto H,
+                                                   const auto rho, bool& relaxation_applied,
+                                                   const double tol, const double lambda) {
+
+    // Update auxiliary values affected by the nonlinear function for which we seek a zero
+    auto alpha1_bar   = (*conserved_variables)(RHO_ALPHA1_BAR_INDEX)/rho;
+    const auto alpha1 = alpha1_bar*(1.0 - (*conserved_variables)(ALPHA1_D_INDEX));
+    const auto rho1   = (alpha1 > eps) ? (*conserved_variables)(M1_INDEX)/alpha1 : nan("");
+    const auto p1     = phase1.pres_value(rho1);
+
+    const auto alpha2 = 1.0 - alpha1 - (*conserved_variables)(ALPHA1_D_INDEX);
+    const auto rho2   = (alpha2 > eps) ? (*conserved_variables)(M2_INDEX)/alpha2 : nan("");
+    const auto p2     = phase2.pres_value(rho2);
+
+    // Compute the nonlinear function for which we seek the zero (basically the Laplace law)
+    const auto F = (1.0 - (*conserved_variables)(ALPHA1_D_INDEX))*(p1 - p2)
+                 - EquationData::sigma*H;
+
+    // Perform the relaxation only where really needed
+    if(!std::isnan(F) && std::abs(F) > tol*EquationData::p0_phase1 && alpha1_bar > eps && 1.0 - alpha1_bar > eps) {
+      relaxation_applied = true;
+
+      // Compute the derivative w.r.t large scale volume fraction recalling that for a barotropic EOS dp/drho = c^2
+      const auto dF_dalpha1_bar = -(*conserved_variables)(M1_INDEX)/(alpha1_bar*alpha1_bar)*
+                                   phase1.c_value(rho1)*phase1.c_value(rho1)
+                                  -(*conserved_variables)(M2_INDEX)/((1.0 - alpha1_bar)*(1.0 - alpha1_bar))*
+                                   phase2.c_value(rho2)*phase2.c_value(rho2);
+
+      /*--- Compute the pseudo time step starting as initial guess from the ideal unmodified Newton method ---*/
+      double dtau_ov_epsilon = std::numeric_limits<double>::infinity();
+
+      // Upper bound of the pseudo time to preserve the bounds for the volume fraction
+      const auto upper_denominator = 1.0/(1.0 - (*conserved_variables)(ALPHA1_D_INDEX))*
+                                     (F + lambda*(1.0 - alpha1_bar)*dF_dalpha1_bar);
+      if(upper_denominator > 0.0) {
+        dtau_ov_epsilon = lambda*(1.0 - alpha1_bar)/upper_denominator;
+      }
+
+      // Lower bound of the pseudo time to preserve the bounds for the volume fraction
+      const auto lower_denominator = 1.0/(1.0 - (*conserved_variables)(ALPHA1_D_INDEX))*
+                                     (F - lambda*alpha1_bar*dF_dalpha1_bar);
+      if(lower_denominator < 0.0) {
+        dtau_ov_epsilon = std::min(dtau_ov_epsilon, -lambda*alpha1_bar/lower_denominator);
+      }
+
+      // Compute the large scale volume fraction update
+      double dalpha1_bar;
+      if(std::isinf(dtau_ov_epsilon)) {
+        dalpha1_bar = -F/dF_dalpha1_bar;
+      }
+      else {
+        dalpha1_bar = dtau_ov_epsilon/(1.0 - (*conserved_variables)(ALPHA1_D_INDEX))*F/
+                      (1.0 - dtau_ov_epsilon*(1.0 - (*conserved_variables)(ALPHA1_D_INDEX))*dF_dalpha1_bar);
+      }
+
+      if(alpha1_bar + dalpha1_bar < 0.0 && alpha1_bar + dalpha1_bar > 1.0) {
+        std::cerr << "Bounds exceeding value for large-scale volume fraction inside Newton step " << std::endl;
+      }
+      else {
+        alpha1_bar += dalpha1_bar;
+      }
+
+      // Update the vector of conserved variables (probably not the optimal choice since I need this update only at the end of the Newton loop,
+      // but the most coherent one thinking about the transfer of mass)
+      (*conserved_variables)(RHO_ALPHA1_BAR_INDEX) = rho*alpha1_bar;
+    }
   }
 
 
@@ -228,46 +304,11 @@ namespace samurai {
         // Compute now the "discrete" flux function, in this case a Rusanov flux
         Rusanov_f[d].cons_flux_function = [&](auto& cells, const Field& field)
                                           {
-                                            /*const auto& left  = cells[0];
+                                            const auto& left  = cells[0];
                                             const auto& right = cells[1];
 
                                             const auto& qL = field[left];
-                                            const auto& qR = field[right];*/
-
-                                            const auto& left_left   = cells[0];
-                                            const auto& left        = cells[1];
-                                            const auto& right       = cells[2];
-                                            const auto& right_right = cells[3];
-
-                                            FluxValue<typename Flux<Field>::cfg> qL = field[left];
-                                            FluxValue<typename Flux<Field>::cfg> qR = field[right];
-                                            const double beta = 1.0;
-                                            for(std::size_t comp = 0; comp < Field::size; ++comp) {
-                                              if(field[right](comp) - field[left](comp) > 0.0) {
-                                                qL(comp) += 0.5*std::max(0.0, std::max(std::min(beta*(field[left](comp) - field[left_left](comp)),
-                                                                                                field[right](comp) - field[left](comp)),
-                                                                                       std::min(field[left](comp) - field[left_left](comp),
-                                                                                                beta*(field[right](comp) - field[left](comp)))));
-                                              }
-                                              else if(field[right](comp) - field[left](comp) < 0.0) {
-                                                qL(comp) += 0.5*std::min(0.0, std::min(std::max(beta*(field[left](comp) - field[left_left](comp)),
-                                                                                                field[right](comp) - field[left](comp)),
-                                                                                       std::max(field[left](comp) - field[left_left](comp),
-                                                                                                beta*(field[right](comp) - field[left](comp)))));
-                                              }
-                                              if(field[right_right](comp) - field[right](comp) > 0.0) {
-                                                qR(comp) -= 0.5*std::max(0.0, std::max(std::min(beta*(field[right](comp) - field[left](comp)),
-                                                                                                field[right_right](comp) - field[right](comp)),
-                                                                                       std::min(field[right](comp) - field[left](comp),
-                                                                                                beta*(field[right_right](comp) - field[right](comp)))));
-                                              }
-                                              else if(field[right_right](comp) - field[right](comp) < 0.0) {
-                                                qR(comp) -= 0.5*std::min(0.0, std::min(std::max(beta*(field[right](comp) - field[left](comp)),
-                                                                                                field[right_right](comp) - field[right](comp)),
-                                                                                       std::max(field[right](comp) - field[left](comp),
-                                                                                                beta*(field[right_right](comp) - field[right](comp)))));
-                                              }
-                                            }
+                                            const auto& qR = field[right];
 
                                             return compute_discrete_flux(qL, qR, d,
                                                                          grad_alpha1_bar[left], grad_alpha1_bar[right]);
