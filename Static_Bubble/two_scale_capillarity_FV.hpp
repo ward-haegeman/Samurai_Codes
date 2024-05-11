@@ -46,7 +46,7 @@ namespace samurai {
     static_assert(field_size == EquationData::NVARS, "The number of elements in the state does not correpsond to the number of equations");
     static_assert(Field::dim == EquationData::dim, "The spatial dimesions do not match");
     static constexpr std::size_t output_field_size = field_size;
-    static constexpr std::size_t stencil_size      = 2;
+    static constexpr std::size_t stencil_size      = 4;
 
     using cfg = FluxConfig<SchemeType::NonLinear, output_field_size, stencil_size, Field>;
 
@@ -228,11 +228,46 @@ namespace samurai {
         // Compute now the "discrete" flux function, in this case a Rusanov flux
         Rusanov_f[d].cons_flux_function = [&](auto& cells, const Field& field)
                                           {
-                                            const auto& left  = cells[0];
+                                            /*const auto& left  = cells[0];
                                             const auto& right = cells[1];
 
                                             const auto& qL = field[left];
-                                            const auto& qR = field[right];
+                                            const auto& qR = field[right];*/
+
+                                            const auto& left_left   = cells[0];
+                                            const auto& left        = cells[1];
+                                            const auto& right       = cells[2];
+                                            const auto& right_right = cells[3];
+
+                                            FluxValue<typename Flux<Field>::cfg> qL = field[left];
+                                            FluxValue<typename Flux<Field>::cfg> qR = field[right];
+                                            const double beta = 1.0;
+                                            for(std::size_t comp = 0; comp < Field::size; ++comp) {
+                                              if(field[right](comp) - field[left](comp) > 0.0) {
+                                                qL(comp) += 0.5*std::max(0.0, std::max(std::min(beta*(field[left](comp) - field[left_left](comp)),
+                                                                                                field[right](comp) - field[left](comp)),
+                                                                                       std::min(field[left](comp) - field[left_left](comp),
+                                                                                                beta*(field[right](comp) - field[left](comp)))));
+                                              }
+                                              else if(field[right](comp) - field[left](comp) < 0.0) {
+                                                qL(comp) += 0.5*std::min(0.0, std::min(std::max(beta*(field[left](comp) - field[left_left](comp)),
+                                                                                                field[right](comp) - field[left](comp)),
+                                                                                       std::max(field[left](comp) - field[left_left](comp),
+                                                                                                beta*(field[right](comp) - field[left](comp)))));
+                                              }
+                                              if(field[right_right](comp) - field[right](comp) > 0.0) {
+                                                qR(comp) -= 0.5*std::max(0.0, std::max(std::min(beta*(field[right](comp) - field[left](comp)),
+                                                                                                field[right_right](comp) - field[right](comp)),
+                                                                                       std::min(field[right](comp) - field[left](comp),
+                                                                                                beta*(field[right_right](comp) - field[right](comp)))));
+                                              }
+                                              else if(field[right_right](comp) - field[right](comp) < 0.0) {
+                                                qR(comp) -= 0.5*std::min(0.0, std::min(std::max(beta*(field[right](comp) - field[left](comp)),
+                                                                                                field[right_right](comp) - field[right](comp)),
+                                                                                       std::max(field[right](comp) - field[left](comp),
+                                                                                                beta*(field[right_right](comp) - field[right](comp)))));
+                                              }
+                                            }
 
                                             return compute_discrete_flux(qL, qR, d,
                                                                          grad_alpha1_bar[left], grad_alpha1_bar[right]);

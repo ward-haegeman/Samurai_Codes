@@ -28,7 +28,7 @@ using namespace EquationData;
 template<std::size_t dim>
 class StaticBubble {
 public:
-  using Config = samurai::MRConfig<dim, 1, 1, 1>;
+  using Config = samurai::MRConfig<dim, 2>;
 
   StaticBubble() = default; // Default constructor. This will do nothing
                             // and basically will never be used
