@@ -74,7 +74,7 @@ private:
   // to have it so as to avoid recomputation
   Field_Scalar alpha1_bar,
                H,
-               rho;
+               dalpha1_bar;
 
   Field_Vect normal,
              grad_alpha1_bar;
@@ -168,7 +168,7 @@ void StaticBubble<dim>::init_variables() {
   normal          = samurai::make_field<double, dim>("normal", mesh);
   H               = samurai::make_field<double, 1>("H", mesh);
 
-  rho             = samurai::make_field<double, 1>("rho", mesh);
+  dalpha1_bar     = samurai::make_field<double, 1>("dalpha1_bar", mesh);
 
   // Declare some constant parameters associated to the grid and to the
   // initial state
@@ -227,15 +227,15 @@ void StaticBubble<dim>::init_variables() {
                            conserved_variables[cell][M2_INDEX] = (!std::isnan(rho2)) ? (1.0 - alpha1_bar[cell])*(1.0 - conserved_variables[cell][ALPHA1_D_INDEX])*rho2 : 0.0;
 
                            // Set conserved variable associated to large-scale volume fraction
-                           rho[cell] = conserved_variables[cell][M1_INDEX]
-                                     + conserved_variables[cell][M2_INDEX]
-                                     + conserved_variables[cell][M1_D_INDEX];
+                           const auto rho = conserved_variables[cell][M1_INDEX]
+                                          + conserved_variables[cell][M2_INDEX]
+                                          + conserved_variables[cell][M1_D_INDEX];
 
-                           conserved_variables[cell][RHO_ALPHA1_BAR_INDEX] = rho[cell]*alpha1_bar[cell];
+                           conserved_variables[cell][RHO_ALPHA1_BAR_INDEX] = rho*alpha1_bar[cell];
 
                            // Set momentum
                            conserved_variables[cell][RHO_U_INDEX]     = conserved_variables[cell][M1_INDEX]*U_1 + conserved_variables[cell][M2_INDEX]*U_0;
-                           conserved_variables[cell][RHO_U_INDEX + 1] = rho[cell]*V;
+                           conserved_variables[cell][RHO_U_INDEX + 1] = rho*V;
                          });
 
   // Consider Dirichlet bcs
@@ -253,8 +253,11 @@ double StaticBubble<dim>::get_max_lambda() const {
                          [&](const auto& cell)
                          {
                            // Compute the velocity along both horizontal and vertical direction
-                           const auto vel_x = conserved_variables[cell][RHO_U_INDEX]/rho[cell];
-                           const auto vel_y = conserved_variables[cell][RHO_U_INDEX + 1]/rho[cell];
+                           const auto rho   = conserved_variables[cell][M1_INDEX]
+                                            + conserved_variables[cell][M2_INDEX]
+                                            + conserved_variables[cell][M1_D_INDEX];
+                           const auto vel_x = conserved_variables[cell][RHO_U_INDEX]/rho;
+                           const auto vel_y = conserved_variables[cell][RHO_U_INDEX + 1]/rho;
 
                            // Compute frozen speed of sound
                            const auto alpha1    = alpha1_bar[cell]*(1.0 - conserved_variables[cell][ALPHA1_D_INDEX]);
@@ -263,10 +266,10 @@ double StaticBubble<dim>::get_max_lambda() const {
                            const auto rho2      = (alpha2 > eps) ? conserved_variables[cell][M2_INDEX]/alpha2 : nan("");
                            const auto c_squared = conserved_variables[cell][M1_INDEX]*EOS_phase1.c_value(rho1)*EOS_phase1.c_value(rho1)
                                                 + conserved_variables[cell][M2_INDEX]*EOS_phase2.c_value(rho2)*EOS_phase2.c_value(rho2);
-                           const auto c         = std::sqrt(c_squared/rho[cell])/(1.0 - conserved_variables[cell][ALPHA1_D_INDEX]);
+                           const auto c         = std::sqrt(c_squared/rho)/(1.0 - conserved_variables[cell][ALPHA1_D_INDEX]);
 
                            // Add term due to surface tension
-                           const double r = EquationData::sigma*std::sqrt(xt::sum(grad_alpha1_bar[cell]*grad_alpha1_bar[cell])())/(rho[cell]*c*c);
+                           const double r = EquationData::sigma*std::sqrt(xt::sum(grad_alpha1_bar[cell]*grad_alpha1_bar[cell])())/(rho*c*c);
 
                            // Update eigenvalue estimate
                            res = std::max(std::max(std::abs(vel_x) + c*(1.0 + 0.125*r),
@@ -298,16 +301,19 @@ void StaticBubble<dim>::apply_relaxation() {
                            [&](const auto& cell)
                            {
                              Rusanov_flux.perform_Newton_step_relaxation(std::make_unique<decltype(conserved_variables[cell])>(conserved_variables[cell]), H[cell],
-                                                                         rho[cell], relaxation_applied,
-                                                                         tol, lambda);
-                             alpha1_bar[cell] = conserved_variables[cell][RHO_ALPHA1_BAR_INDEX]/rho[cell];
+                                                                         dalpha1_bar[cell], relaxation_applied, tol, lambda);
+
+                             const auto rho   = conserved_variables[cell][M1_INDEX]
+                                              + conserved_variables[cell][M2_INDEX]
+                                              + conserved_variables[cell][M1_D_INDEX];
+                             alpha1_bar[cell] = conserved_variables[cell][RHO_ALPHA1_BAR_INDEX]/rho;
                            });
 
     // Recompute geometric quantities (curvature potentially changed in the Newton loop)
     update_geometry();
 
     // Newton cycle diverged
-    if(Newton_iter > 100) {
+    if(Newton_iter > 60) {
       std::cout << "Netwon method not converged in the post-hyperbolic relaxation" << std::endl;
       save(fs::current_path(), "static_bubble", "_diverged",
            conserved_variables, alpha1_bar, grad_alpha1_bar, normal, H);
@@ -385,7 +391,7 @@ void StaticBubble<dim>::run() {
     H.resize();
     update_geometry();
 
-    rho.resize();
+    dalpha1_bar.resize();
 
     // Apply the numerical scheme without relaxation
     samurai::update_ghost_mr(conserved_variables);
@@ -430,11 +436,11 @@ void StaticBubble<dim>::run() {
                                exit(1);
                              }
 
-                             rho[cell] = conserved_variables[cell][M1_INDEX]
-                                       + conserved_variables[cell][M2_INDEX]
-                                       + conserved_variables[cell][M1_D_INDEX];
+                             const auto rho = conserved_variables[cell][M1_INDEX]
+                                            + conserved_variables[cell][M2_INDEX]
+                                            + conserved_variables[cell][M1_D_INDEX];
 
-                             alpha1_bar[cell] = conserved_variables[cell][RHO_ALPHA1_BAR_INDEX]/rho[cell];
+                             alpha1_bar[cell] = std::min(std::max(0.0, conserved_variables[cell][RHO_ALPHA1_BAR_INDEX]/rho), 1.0);
                            });
     update_geometry();
 
@@ -442,6 +448,11 @@ void StaticBubble<dim>::run() {
       // Apply relaxation if desired, which will modify alpha1_bar and, consequently, for what
       // concerns next time step, rho_alpha1_bar
       // (as well as grad_alpha1_bar, updated dynamically in Newton since curvature potentially changes)
+      samurai::for_each_cell(mesh,
+                             [&](const auto& cell)
+                             {
+                               dalpha1_bar[cell] = std::numeric_limits<double>::infinity();
+                             });
       apply_relaxation();
     }
 

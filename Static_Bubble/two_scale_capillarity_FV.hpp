@@ -60,7 +60,7 @@ namespace samurai {
                                             const auto& grad_alpha1_bar); // Evaluate the 'continuous' flux for the state q along direction curr_d
 
     void perform_Newton_step_relaxation(auto conserved_variables, const auto H,
-                                        const auto rho, bool& relaxation_applied,
+                                        auto& dalpha1_bar, bool& relaxation_applied,
                                         const double tol = 1e-8, const double lambda = 0.9); // Perform a Newton step relaxation for a state vector (it is not a real space dependent procedure,
                                                                                              // but I need to be able to do it inside the flux location for MUSCL reconstruction)
 
@@ -146,10 +146,13 @@ namespace samurai {
   //
   template<class Field>
   void Flux<Field>::perform_Newton_step_relaxation(auto conserved_variables, const auto H,
-                                                   const auto rho, bool& relaxation_applied,
+                                                   auto& dalpha1_bar, bool& relaxation_applied,
                                                    const double tol, const double lambda) {
 
     // Update auxiliary values affected by the nonlinear function for which we seek a zero
+    auto rho          = (*conserved_variables)(M1_INDEX)
+                      + (*conserved_variables)(M2_INDEX)
+                      + (*conserved_variables)(M1_D_INDEX);
     auto alpha1_bar   = (*conserved_variables)(RHO_ALPHA1_BAR_INDEX)/rho;
     const auto alpha1 = alpha1_bar*(1.0 - (*conserved_variables)(ALPHA1_D_INDEX));
     const auto rho1   = (alpha1 > eps) ? (*conserved_variables)(M1_INDEX)/alpha1 : nan("");
@@ -159,12 +162,20 @@ namespace samurai {
     const auto rho2   = (alpha2 > eps) ? (*conserved_variables)(M2_INDEX)/alpha2 : nan("");
     const auto p2     = phase2.pres_value(rho2);
 
+    // Reinitialization of partial masses in case of evanascent volume fraction
+    if(alpha1_bar < eps) {
+      (*conserved_variables)(M1_INDEX) = alpha1_bar*EquationData::rho0_phase1;
+    }
+    if(1.0 - alpha1_bar < eps) {
+      (*conserved_variables)(M2_INDEX) = (1.0 - alpha1_bar)*EquationData::rho0_phase2;
+    }
+
     // Compute the nonlinear function for which we seek the zero (basically the Laplace law)
     const auto F = (1.0 - (*conserved_variables)(ALPHA1_D_INDEX))*(p1 - p2)
                  - EquationData::sigma*H;
 
     // Perform the relaxation only where really needed
-    if(!std::isnan(F) && std::abs(F) > tol*EquationData::p0_phase1 && alpha1_bar > eps && 1.0 - alpha1_bar > eps) {
+    if(!std::isnan(F) && std::abs(F) > tol*EquationData::p0_phase1 && dalpha1_bar > tol && alpha1_bar > eps && 1.0 - alpha1_bar > eps) {
       relaxation_applied = true;
 
       // Compute the derivative w.r.t large scale volume fraction recalling that for a barotropic EOS dp/drho = c^2
@@ -191,7 +202,6 @@ namespace samurai {
       }
 
       // Compute the large scale volume fraction update
-      double dalpha1_bar;
       if(std::isinf(dtau_ov_epsilon)) {
         dalpha1_bar = -F/dF_dalpha1_bar;
       }
@@ -209,6 +219,9 @@ namespace samurai {
 
       // Update the vector of conserved variables (probably not the optimal choice since I need this update only at the end of the Newton loop,
       // but the most coherent one thinking about the transfer of mass)
+      rho = (*conserved_variables)(M1_INDEX)
+          + (*conserved_variables)(M2_INDEX)
+          + (*conserved_variables)(M1_D_INDEX);
       (*conserved_variables)(RHO_ALPHA1_BAR_INDEX) = rho*alpha1_bar;
     }
   }
