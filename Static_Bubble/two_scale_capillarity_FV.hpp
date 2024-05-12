@@ -29,6 +29,15 @@ namespace EquationData {
 
   // Save also the total number of (scalar) variables
   static constexpr std::size_t NVARS = 6 + dim;
+
+  // Use auxiliary variables for the indices also fo primitve variables for the sake of generality
+  static constexpr std::size_t P1_INDEX            = 0;
+  static constexpr std::size_t P2_INDEX            = 1;
+  static constexpr std::size_t M1_D_INDEX_PRIM     = 2;
+  static constexpr std::size_t ALPHA1_D_INDEX_PRIM = 3;
+  static constexpr std::size_t SIGMA_D_INDEX_PRIM  = 4;
+  static constexpr std::size_t ALPHA1_BAR_INDEX    = 5;
+  static constexpr std::size_t U_INDEX             = 6;
 }
 
 
@@ -63,6 +72,10 @@ namespace samurai {
                                         auto& dalpha1_bar, bool& relaxation_applied,
                                         const double tol = 1e-8, const double lambda = 0.9); // Perform a Newton step relaxation for a state vector (it is not a real space dependent procedure,
                                                                                              // but I need to be able to do it inside the flux location for MUSCL reconstruction)
+
+    auto cons2prim(const auto& conserved_variables); // Conversion from conserved to primitive variables
+
+    auto prim2cons(const auto& primitive_variables); // Conversion from conserved to primitive variables
 
   protected:
     const BarotropicEOS<>& phase1;
@@ -116,9 +129,9 @@ namespace samurai {
     const auto rho2       = (alpha2 > eps) ? q(M2_INDEX)/alpha2 : nan("");
     const auto p2         = phase2.pres_value(rho2);
 
-    const auto p_bar      = (alpha1_bar > eps && 1.0 - alpha1_bar > eps) ?
+    const auto p_bar      = (alpha1 > eps && alpha2 > eps) ?
                             alpha1_bar*p1 + (1.0 - alpha1_bar)*p2 :
-                            ((alpha1_bar < eps) ? p2 : p1);
+                            ((alpha1 < eps) ? p2 : p1);
 
     res(RHO_U_INDEX + curr_d) += p_bar;
 
@@ -226,6 +239,69 @@ namespace samurai {
     }
   }
 
+  // Conversion from conserved to primitive variables
+  //
+  template<class Field>
+  auto Flux<Field>::cons2prim(const auto& conserved_variables) {
+    // Create a copy of the state to save the output
+    FluxValue<cfg> res = conserved_variables;
+
+    // Set variables which are already 'primitive'
+    res(M1_D_INDEX_PRIM)     = conserved_variables(M1_D_INDEX);
+    res(ALPHA1_D_INDEX_PRIM) = conserved_variables(ALPHA1_D_INDEX);
+    res(SIGMA_D_INDEX_PRIM)  = conserved_variables(SIGMA_D_INDEX);
+
+    // Focus now on the remaining variables
+    const auto rho   = conserved_variables(M1_INDEX)
+                     + conserved_variables(M2_INDEX)
+                     + conserved_variables(M1_D_INDEX);
+    res(U_INDEX)     = conserved_variables(RHO_U_INDEX)/rho;
+    res(U_INDEX + 1) = conserved_variables(RHO_U_INDEX)/rho;
+
+    const auto alpha1_bar = conserved_variables(RHO_ALPHA1_BAR_INDEX)/rho;
+    res(ALPHA1_BAR_INDEX) = alpha1_bar;
+
+    const auto alpha1 = alpha1_bar*(1.0 - conserved_variables(ALPHA1_D_INDEX));
+    const auto rho1   = (alpha1 > eps) ? conserved_variables(M1_INDEX)/alpha1 : nan("");
+    res(P1_INDEX)     = phase1.pres_value(rho1);
+
+    const auto alpha2 = 1.0 - alpha1 - conserved_variables(ALPHA1_D_INDEX);
+    const auto rho2   = (alpha2 > eps) ? conserved_variables(M2_INDEX)/alpha2 : nan("");
+    res(P2_INDEX)     = phase2.pres_value(rho2);
+
+    return res;
+  }
+
+  // Conversion from primitive to conserved variables
+  //
+  template<class Field>
+  auto Flux<Field>::prim2cons(const auto& primitive_variables) {
+    // Create a copy of the state to save the output
+    FluxValue<cfg> res = primitive_variables;
+
+    // Set variables which are already 'conserved'
+    res(M1_D_INDEX)     = primitive_variables(M1_D_INDEX_PRIM);
+    res(ALPHA1_D_INDEX) = primitive_variables(ALPHA1_D_INDEX_PRIM);
+    res(SIGMA_D_INDEX)  = primitive_variables(SIGMA_D_INDEX_PRIM);
+
+    // Focus now on large-scale partial masses
+    const auto alpha1 = primitive_variables(ALPHA1_BAR_INDEX)*(1.0 - primitive_variables(ALPHA1_D_INDEX));
+    const auto rho1   = phase1.rho_value(primitive_variables(P1_INDEX));
+    res(M1_INDEX)     = (alpha1 > eps) ? alpha1*rho1 : 0.0;
+
+    const auto alpha2 = 1.0 - alpha1 - primitive_variables(ALPHA1_D_INDEX);
+    const auto rho2   = phase2.rho_value(primitive_variables(P2_INDEX));
+    res(M2_INDEX)     = (alpha2 > eps) ? alpha2*rho2 : 0.0;
+
+    // Finally, focus on the large-scale volume fraction and momentum
+    const auto rho            = res(M1_INDEX) + res(M2_INDEX) + res(M1_D_INDEX);
+    res(RHO_ALPHA1_BAR_INDEX) = rho*primitive_variables(ALPHA1_BAR_INDEX);
+    res(RHO_U_INDEX)          = primitive_variables(U_INDEX)*rho;
+    res(RHO_U_INDEX + 1)      = primitive_variables(U_INDEX + 1)*rho;
+
+    return res;
+  }
+
 
   /**
     * Implementation of a Rusanov flux
@@ -320,8 +396,8 @@ namespace samurai {
                                             const auto& left  = cells[0];
                                             const auto& right = cells[1];
 
-                                            const auto& qL = field[left];
-                                            const auto& qR = field[right];
+                                            const auto& qL = this->prim2cons(this->cons2prim(field[left]));
+                                            const auto& qR = this->prim2cons(this->cons2prim(field[right]));
 
                                             return compute_discrete_flux(qL, qR, d,
                                                                          grad_alpha1_bar[left], grad_alpha1_bar[right]);
