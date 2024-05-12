@@ -301,12 +301,7 @@ void StaticBubble<dim>::apply_relaxation() {
                            [&](const auto& cell)
                            {
                              Rusanov_flux.perform_Newton_step_relaxation(std::make_unique<decltype(conserved_variables[cell])>(conserved_variables[cell]), H[cell],
-                                                                         dalpha1_bar[cell], relaxation_applied, tol, lambda);
-
-                             const auto rho   = conserved_variables[cell][M1_INDEX]
-                                              + conserved_variables[cell][M2_INDEX]
-                                              + conserved_variables[cell][M1_D_INDEX];
-                             alpha1_bar[cell] = conserved_variables[cell][RHO_ALPHA1_BAR_INDEX]/rho;
+                                                                         dalpha1_bar[cell], alpha1_bar[cell], relaxation_applied, tol, lambda);
                            });
 
     // Recompute geometric quantities (curvature potentially changed in the Newton loop)
@@ -391,8 +386,6 @@ void StaticBubble<dim>::run() {
     H.resize();
     update_geometry();
 
-    dalpha1_bar.resize();
-
     // Apply the numerical scheme without relaxation
     samurai::update_ghost_mr(conserved_variables);
     auto flux_conserved = numerical_flux(conserved_variables);
@@ -448,6 +441,7 @@ void StaticBubble<dim>::run() {
       // Apply relaxation if desired, which will modify alpha1_bar and, consequently, for what
       // concerns next time step, rho_alpha1_bar
       // (as well as grad_alpha1_bar, updated dynamically in Newton since curvature potentially changes)
+      dalpha1_bar.resize();
       samurai::for_each_cell(mesh,
                              [&](const auto& cell)
                              {
