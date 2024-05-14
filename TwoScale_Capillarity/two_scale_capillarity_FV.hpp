@@ -75,7 +75,8 @@ namespace samurai {
   Flux<Field>::Flux(const BarotropicEOS<>& EOS_phase1,
                     const BarotropicEOS<>& EOS_phase2,
                     const double eps_,
-                    const double mod_grad_alpha1_bar_min_): phase1(EOS_phase1), phase2(EOS_phase2), eps(eps_), mod_grad_alpha1_bar_min(mod_grad_alpha1_bar_min_) {}
+                    const double mod_grad_alpha1_bar_min_):
+    phase1(EOS_phase1), phase2(EOS_phase2), eps(eps_), mod_grad_alpha1_bar_min(mod_grad_alpha1_bar_min_) {}
 
   // Evaluate the 'continuous flux'
   //

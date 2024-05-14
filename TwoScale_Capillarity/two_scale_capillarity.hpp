@@ -243,10 +243,13 @@ void TwoScaleCapillarity<dim>::init_variables() {
                            p1 += (alpha1_bar[cell] > 1.0 - eps) ? EquationData::sigma/R : ((alpha1_bar[cell] > 0.0) ? EquationData::sigma*H[cell] : 0.0);
                            const auto rho1 = EOS_phase1.rho_value(p1);
 
-                           conserved_variables[cell][M1_INDEX] = (!std::isnan(rho1)) ? alpha1_bar[cell]*(1.0 - conserved_variables[cell][ALPHA1_D_INDEX])*rho1 : 0.0;
+                           conserved_variables[cell][M1_INDEX] = (!std::isnan(rho1)) ?
+                                                                 alpha1_bar[cell]*(1.0 - conserved_variables[cell][ALPHA1_D_INDEX])*rho1 :
+                                                                 0.0;
 
                            // Set mass phase 2
-                           conserved_variables[cell][M2_INDEX] = (1.0 - alpha1_bar[cell])*(1.0 - conserved_variables[cell][ALPHA1_D_INDEX])*EOS_phase2.get_rho0();
+                           conserved_variables[cell][M2_INDEX] = (1.0 - alpha1_bar[cell])*(1.0 - conserved_variables[cell][ALPHA1_D_INDEX])*
+                                                                 EOS_phase2.get_rho0();
 
                            // Set conserved variable associated to large-scale volume fraction
                            const auto rho = conserved_variables[cell][M1_INDEX]
@@ -380,16 +383,18 @@ void TwoScaleCapillarity<dim>::apply_relaxation() {
                                H_lim[cell] = H[cell];
                              }
 
-                             dH[cell] = H[cell] - H_lim[cell]; //TODO: Initialize this outside and check if the maximum of dH at previous iteration is grater than
-                                                               //      a tolerance (1e-7 in Arthur's code). On the other hand, update geoemtry should alyways be necessary
+                             dH[cell] = H[cell] - H_lim[cell]; //TODO: Initialize this outside and check if the maximum of dH
+                                                               //at previous iteration is grater than a tolerance (1e-7 in Arthur's code).
+                                                               //On the other hand, update geoemtry should in principle always be necessary,
+                                                               //but seems to lead to issues if called every Newton iteration
 
                              // Compute the nonlinear function for which we seek the zero (basically the Laplace law)
                              const auto F = (1.0 - conserved_variables[cell][ALPHA1_D_INDEX])*(p1 - p2)
-                                          - EquationData::sigma*H[cell];
+                                          - EquationData::sigma*H_lim[cell];
 
                              // Perform the relaxation only where really needed
-                             if(!std::isnan(F) && std::abs(F) > tol*std::min(EOS_phase1.get_p0(), EquationData::sigma*H_lim[cell]) && std::abs(dalpha1_bar[cell]) > tol &&
-                                alpha1_bar[cell] > eps && 1.0 - alpha1_bar[cell] > eps) {
+                             if(!std::isnan(F) && std::abs(F) > tol*std::min(EOS_phase1.get_p0(), EquationData::sigma*H_lim[cell]) &&
+                                std::abs(dalpha1_bar[cell]) > tol && alpha1_bar[cell] > eps && 1.0 - alpha1_bar[cell] > eps) {
                                relaxation_applied = true;
 
                                // Compute the derivative w.r.t large scale volume fraction recalling that for a barotropic EOS dp/drho = c^2
@@ -404,7 +409,8 @@ void TwoScaleCapillarity<dim>::apply_relaxation() {
                                // Bound preserving condition for m1, velocity and small-scale volume fraction
                                if(dH[cell] > 0.0 && !std::isnan(rho1)) {
                                  /*--- Bound preserving condition for m1 ---*/
-                                 dtau_ov_epsilon = lambda*conserved_variables[cell][M1_INDEX]*(1.0 - alpha1_bar[cell])/(rho1*EquationData::sigma*dH[cell]);
+                                 dtau_ov_epsilon = lambda*conserved_variables[cell][M1_INDEX]*(1.0 - alpha1_bar[cell])/
+                                                   (rho1*EquationData::sigma*dH[cell]);
                                  if(dtau_ov_epsilon < 0.0) {
                                    std::cerr << "Negative time step found after relaxation of mass of large-scale phase 1" << std::endl;
                                    exit(1);
@@ -413,7 +419,8 @@ void TwoScaleCapillarity<dim>::apply_relaxation() {
                                  /*--- Bound preserving for the velocity ---*/
                                  const auto mom_dot_vel = (conserved_variables[cell][RHO_U_INDEX]*conserved_variables[cell][RHO_U_INDEX] +
                                                            conserved_variables[cell][RHO_U_INDEX + 1]*conserved_variables[cell][RHO_U_INDEX + 1])/rho;
-                                 const auto fac = std::max(3.0/(EquationData::kappa*rho1d)*(rho1/(1.0 - alpha1_bar[cell])) - 1.0/(1.0 - conserved_variables[cell][ALPHA1_D_INDEX]), 0.0);
+                                 const auto fac = std::max(3.0/(EquationData::kappa*rho1d)*(rho1/(1.0 - alpha1_bar[cell])) -
+                                                           1.0/(1.0 - conserved_variables[cell][ALPHA1_D_INDEX]), 0.0);
                                  if(fac > 0.0) {
                                    auto dtau_ov_epsilon_tmp = mom_dot_vel/(EquationData::Hmax*dH[cell]*fac*EquationData::sigma*EquationData::sigma);
                                    dtau_ov_epsilon          = std::min(dtau_ov_epsilon, dtau_ov_epsilon_tmp);
@@ -444,10 +451,12 @@ void TwoScaleCapillarity<dim>::apply_relaxation() {
                                                         + EOS_phase1.c_value(rho1)*EOS_phase1.c_value(rho1)*rho1
                                                         - EOS_phase2.c_value(rho2)*EOS_phase2.c_value(rho2)*rho2;
                                const auto dF_dm1        = EOS_phase1.c_value(rho1)*EOS_phase1.c_value(rho1)/alpha1_bar[cell];
-                               const auto R             = dF_dalpha1d - dF_dm1;
-                               const auto a             = rho1*EquationData::sigma*dH[cell]*R/((1.0 - alpha1_bar[cell])*(1.0 - conserved_variables[cell][ALPHA1_D_INDEX]));
+                               const auto R             = dF_dalpha1d/rho1d - dF_dm1;
+                               const auto a             = rho1*EquationData::sigma*dH[cell]*R/
+                                                          ((1.0 - alpha1_bar[cell])*(1.0 - conserved_variables[cell][ALPHA1_D_INDEX]));
                                /*--- Upper bound ---*/
-                               auto b                   = (F + lambda*(1.0 - alpha1_bar[cell])*dF_dalpha1_bar)/(1.0 - conserved_variables[cell][ALPHA1_D_INDEX]);
+                               auto b                   = (F + lambda*(1.0 - alpha1_bar[cell])*dF_dalpha1_bar)/
+                                                          (1.0 - conserved_variables[cell][ALPHA1_D_INDEX]);
                                auto D                   = b*b - 4.0*a*(-lambda*(1.0 - alpha1_bar[cell]));
                                auto dtau_ov_epsilon_tmp = std::numeric_limits<double>::infinity();
                                if(D > 0.0 && (a > 0.0 || (a < 0.0 && b > 0.0))) {
@@ -459,7 +468,8 @@ void TwoScaleCapillarity<dim>::apply_relaxation() {
                                dtau_ov_epsilon = std::min(dtau_ov_epsilon, dtau_ov_epsilon_tmp);
                                /*--- Lower bound ---*/
                                dtau_ov_epsilon_tmp = std::numeric_limits<double>::infinity();
-                               b                   = (F - lambda*alpha1_bar[cell]*dF_dalpha1_bar)/(1.0 - conserved_variables[cell][ALPHA1_D_INDEX]);
+                               b                   = (F - lambda*alpha1_bar[cell]*dF_dalpha1_bar)/
+                                                     (1.0 - conserved_variables[cell][ALPHA1_D_INDEX]);
                                D                   = b*b - 4.0*a*(lambda*alpha1_bar[cell]);
                                if(D > 0.0 && (a < 0.0 || (a > 0.0 && b < 0.0))) {
                                  dtau_ov_epsilon_tmp = 0.5*(-b - std::sqrt(D))/a;
@@ -480,12 +490,13 @@ void TwoScaleCapillarity<dim>::apply_relaxation() {
                                  dalpha1_bar[cell] = -F/dF_dalpha1_bar;
                                }
                                else {
-                                 const auto dm1 = -dtau_ov_epsilon*conserved_variables[cell][M1_INDEX]/
-                                                   (alpha1_bar[cell]*(1.0 - conserved_variables[cell][ALPHA1_D_INDEX])*(1.0 - alpha1_bar[cell]))*
+                                 const auto dm1 = -dtau_ov_epsilon/(1.0 - alpha1_bar[cell])*
+                                                   (conserved_variables[cell][M1_INDEX]/(alpha1_bar[cell]*(1.0 - conserved_variables[cell][ALPHA1_D_INDEX])))*
                                                    EquationData::sigma*dH[cell];
 
-                                 dalpha1_bar[cell] = dtau_ov_epsilon/(1.0 - conserved_variables[cell][ALPHA1_D_INDEX])/
-                                                     (1.0 - dtau_ov_epsilon*dF_dalpha1_bar/(1.0 - conserved_variables[cell][ALPHA1_D_INDEX]))*(F - dm1*R);
+                                 const auto num_dalpha1_bar = dtau_ov_epsilon/(1.0 - conserved_variables[cell][ALPHA1_D_INDEX]);
+                                 const auto den_dalpha1_bar = 1.0 - dtau_ov_epsilon*dF_dalpha1_bar/(1.0 - conserved_variables[cell][ALPHA1_D_INDEX]);
+                                 dalpha1_bar[cell]          = (num_dalpha1_bar/den_dalpha1_bar)*(F - dm1*(dF_dm1 + dtau_ov_epsilon*(dF_dalpha1d/rho1d)));
 
                                  if(dm1 > 0.0) {
                                    std::cerr << "Negative sign of mass transfer inside Newton step" << std::endl;
@@ -521,7 +532,8 @@ void TwoScaleCapillarity<dim>::apply_relaxation() {
                                }
 
                                if(dH[cell] > 0.0) {
-                                 const auto fac = std::max(3.0/(EquationData::kappa*rho1d)*(rho1/(1.0 - alpha1_bar[cell])) - 1.0/(1.0 - conserved_variables[cell][ALPHA1_D_INDEX]), 0.0);
+                                 const auto fac = std::max(3.0/(EquationData::kappa*rho1d)*(rho1/(1.0 - alpha1_bar[cell])) -
+                                                           1.0/(1.0 - conserved_variables[cell][ALPHA1_D_INDEX]), 0.0);
 
                                  double drho_fac = 0.0;
                                  const auto mom_squared = conserved_variables[cell][RHO_U_INDEX]*conserved_variables[cell][RHO_U_INDEX]
@@ -537,13 +549,14 @@ void TwoScaleCapillarity<dim>::apply_relaxation() {
                                }
                              }
 
-                             // Update "conservative counter part" of large-scale volume fraction. Do it outside because this can change either because of relaxation of
+                             // Update "conservative counter part" of large-scale volume fraction.
+                             // Do it outside because this can change either because of relaxation of
                              // alpha1_bar or because of change of rho for evanescent volume fractions.
                              conserved_variables[cell][RHO_ALPHA1_BAR_INDEX] = rho*alpha1_bar[cell];
                            });
 
     // Recompute geometric quantities (curvature potentially changed in the Newton loop)
-    update_geometry();
+    //update_geometry();
 
     // Stop the mass transfer after a sufficient time of Newton iterations for safety
     if(mass_transfer_NR && Newton_iter > 30) {
@@ -690,6 +703,7 @@ void TwoScaleCapillarity<dim>::run() {
                                dalpha1_bar[cell] = std::numeric_limits<double>::infinity();
                              });
       apply_relaxation();
+      update_geometry();
     }
 
     // Save the results
