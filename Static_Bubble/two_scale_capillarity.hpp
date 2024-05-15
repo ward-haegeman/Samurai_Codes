@@ -305,7 +305,7 @@ void StaticBubble<dim>::apply_relaxation() {
                            });
 
     // Recompute geometric quantities (curvature potentially changed in the Newton loop)
-    update_geometry();
+    //update_geometry();
 
     // Newton cycle diverged
     if(Newton_iter > 60) {
@@ -354,7 +354,7 @@ void StaticBubble<dim>::run() {
   auto conserved_variables_np1 = samurai::make_field<double, EquationData::NVARS>("conserved_np1", mesh);
 
   // Create the flux variable
-  auto numerical_flux = Rusanov_flux.make_two_scale_capillarity(grad_alpha1_bar);
+  auto numerical_flux = Rusanov_flux.make_two_scale_capillarity(grad_alpha1_bar, H);
 
   // Save the initial condition
   const std::string suffix_init = (nfiles != 1) ? fmt::format("_min_level_{}_max_level_{}_ite_0", mesh.min_level(), mesh.max_level()) : "";
@@ -448,6 +448,7 @@ void StaticBubble<dim>::run() {
                                dalpha1_bar[cell] = std::numeric_limits<double>::infinity();
                              });
       apply_relaxation();
+      update_geometry();
     }
 
     // Compute updated time step

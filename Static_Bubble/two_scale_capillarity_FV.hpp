@@ -31,8 +31,8 @@ namespace EquationData {
   static constexpr std::size_t NVARS = 6 + dim;
 
   // Use auxiliary variables for the indices also fo primitve variables for the sake of generality
-  static constexpr std::size_t P1_INDEX            = 0;
-  static constexpr std::size_t P2_INDEX            = 1;
+  static constexpr std::size_t VOID_INDEX          = 0;
+  static constexpr std::size_t PBAR_INDEX          = 1;
   static constexpr std::size_t M1_D_INDEX_PRIM     = 2;
   static constexpr std::size_t ALPHA1_D_INDEX_PRIM = 3;
   static constexpr std::size_t SIGMA_D_INDEX_PRIM  = 4;
@@ -75,7 +75,7 @@ namespace samurai {
 
     auto cons2prim(const auto& conserved_variables); // Conversion from conserved to primitive variables
 
-    auto prim2cons(const auto& primitive_variables); // Conversion from conserved to primitive variables
+    auto prim2cons(const auto& primitive_variables, const auto& H); // Conversion from conserved to primitive variables
 
   protected:
     const BarotropicEOS<>& phase1;
@@ -261,11 +261,17 @@ namespace samurai {
 
     const auto alpha1 = alpha1_bar*(1.0 - conserved_variables(ALPHA1_D_INDEX));
     const auto rho1   = (alpha1 > eps) ? conserved_variables(M1_INDEX)/alpha1 : nan("");
-    res(P1_INDEX)     = phase1.pres_value(rho1);
+    const auto p1     = phase1.pres_value(rho1);
 
     const auto alpha2 = 1.0 - alpha1 - conserved_variables(ALPHA1_D_INDEX);
     const auto rho2   = (alpha2 > eps) ? conserved_variables(M2_INDEX)/alpha2 : nan("");
-    res(P2_INDEX)     = phase2.pres_value(rho2);
+    const auto p2     = phase2.pres_value(rho2);
+
+    res(PBAR_INDEX)   = (alpha1 > eps && alpha2 > eps) ?
+                        alpha1_bar*p1 + (1.0 - alpha1_bar)*p2 :
+                        ((alpha1 < eps) ? p2 : p1);
+
+    res(VOID_INDEX)   = 0.0;
 
     return res;
   }
@@ -273,7 +279,7 @@ namespace samurai {
   // Conversion from primitive to conserved variables
   //
   template<class Field>
-  auto Flux<Field>::prim2cons(const auto& primitive_variables) {
+  auto Flux<Field>::prim2cons(const auto& primitive_variables, const auto& H) {
     // Create a copy of the state to save the output
     FluxValue<cfg> res = primitive_variables;
 
@@ -284,11 +290,17 @@ namespace samurai {
 
     // Focus now on large-scale partial masses
     const auto alpha1 = primitive_variables(ALPHA1_BAR_INDEX)*(1.0 - primitive_variables(ALPHA1_D_INDEX));
-    const auto rho1   = phase1.rho_value(primitive_variables(P1_INDEX));
+    const auto p1     = alpha1 > eps ?
+                        (!std::isnan(H) ? primitive_variables(PBAR_INDEX) + (1.0 - primitive_variables(ALPHA1_BAR_INDEX))*EquationData::sigma*H :
+                                          primitive_variables(PBAR_INDEX)) : nan("");
+    const auto rho1   = phase1.rho_value(p1);
     res(M1_INDEX)     = (alpha1 > eps) ? alpha1*rho1 : 0.0;
 
     const auto alpha2 = 1.0 - alpha1 - primitive_variables(ALPHA1_D_INDEX);
-    const auto rho2   = phase2.rho_value(primitive_variables(P2_INDEX));
+    const auto p2     = alpha2 > eps ?
+                        (!std::isnan(H) ? primitive_variables(PBAR_INDEX) - primitive_variables(ALPHA1_BAR_INDEX)*EquationData::sigma*H :
+                                          primitive_variables(PBAR_INDEX)) : nan("");
+    const auto rho2   = phase2.rho_value(p2);
     res(M2_INDEX)     = (alpha2 > eps) ? alpha2*rho2 : 0.0;
 
     // Finally, focus on the large-scale volume fraction and momentum
@@ -318,7 +330,7 @@ namespace samurai {
                                                                const auto& grad_alpha1_barL,
                                                                const auto& grad_alpha1_barR); // Rusanov flux along direction curr_d
 
-    auto make_two_scale_capillarity(const auto& grad_alpha1_bar); // Compute the flux over all cells
+    auto make_two_scale_capillarity(const auto& grad_alpha1_bar, const auto& H); // Compute the flux over all cells
   };
 
   // Constructor derived from the base class
@@ -378,7 +390,7 @@ namespace samurai {
   // Implement the contribution of the discrete flux for all the cells in the mesh.
   //
   template<class Field>
-  auto RusanovFlux<Field>::make_two_scale_capillarity(const auto& grad_alpha1_bar) {
+  auto RusanovFlux<Field>::make_two_scale_capillarity(const auto& grad_alpha1_bar, const auto& H) {
     FluxDefinition<typename Flux<Field>::cfg> Rusanov_f;
 
     // Perform the loop over each dimension to compute the flux contribution
@@ -394,8 +406,8 @@ namespace samurai {
                                             const auto& left  = cells[0];
                                             const auto& right = cells[1];
 
-                                            const auto& qL = this->prim2cons(this->cons2prim(field[left]));
-                                            const auto& qR = this->prim2cons(this->cons2prim(field[right]));
+                                            const auto& qL = this->prim2cons(this->cons2prim(field[left]), H[left]);
+                                            const auto& qR = this->prim2cons(this->cons2prim(field[right]), H[right]);
 
                                             return compute_discrete_flux(qL, qR, d,
                                                                          grad_alpha1_bar[left], grad_alpha1_bar[right]);
