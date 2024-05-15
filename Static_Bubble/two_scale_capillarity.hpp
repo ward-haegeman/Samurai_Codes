@@ -28,7 +28,7 @@ using namespace EquationData;
 template<std::size_t dim>
 class StaticBubble {
 public:
-  using Config = samurai::MRConfig<dim, 2>;
+  using Config = samurai::MRConfig<dim, 2, 2, 2>;
 
   StaticBubble() = default; // Default constructor. This will do nothing
                             // and basically will never be used
@@ -218,13 +218,17 @@ void StaticBubble<dim>::init_variables() {
                            p1 += (alpha1_bar[cell] > 1.0 - eps) ? EquationData::sigma/R : EquationData::sigma*H[cell];
                            const auto rho1 = EOS_phase1.rho_value(p1);
 
-                           conserved_variables[cell][M1_INDEX] = (!std::isnan(rho1)) ? alpha1_bar[cell]*(1.0 - conserved_variables[cell][ALPHA1_D_INDEX])*rho1 : 0.0;
+                           conserved_variables[cell][M1_INDEX] = (!std::isnan(rho1)) ?
+                                                                 alpha1_bar[cell]*(1.0 - conserved_variables[cell][ALPHA1_D_INDEX])*rho1 :
+                                                                 0.0;
 
                            // Set mass phase 2
                            const auto p2   = (alpha1_bar[cell] < 1.0 - eps) ? EOS_phase2.get_p0() : nan("");
                            const auto rho2 = EOS_phase2.rho_value(p2);
 
-                           conserved_variables[cell][M2_INDEX] = (!std::isnan(rho2)) ? (1.0 - alpha1_bar[cell])*(1.0 - conserved_variables[cell][ALPHA1_D_INDEX])*rho2 : 0.0;
+                           conserved_variables[cell][M2_INDEX] = (!std::isnan(rho2)) ?
+                                                                 (1.0 - alpha1_bar[cell])*(1.0 - conserved_variables[cell][ALPHA1_D_INDEX])*rho2 :
+                                                                 0.0;
 
                            // Set conserved variable associated to large-scale volume fraction
                            const auto rho = conserved_variables[cell][M1_INDEX]
@@ -351,6 +355,7 @@ void StaticBubble<dim>::run() {
   const double dt_save = Tf / static_cast<double>(nfiles);
 
   // Auxiliary variables to save updated fields
+  auto conserved_variables_tmp = samurai::make_field<double, EquationData::NVARS>("conserved_tmp", mesh);
   auto conserved_variables_np1 = samurai::make_field<double, EquationData::NVARS>("conserved_np1", mesh);
 
   // Create the flux variable
@@ -377,7 +382,7 @@ void StaticBubble<dim>::run() {
 
     std::cout << fmt::format("Iteration {}: t = {}, dt = {}", ++nt, t, dt) << std::endl;
 
-    // Apply mesh adaptation
+    /*--- Apply mesh adaptation ---*/
     samurai::update_ghost_mr(grad_alpha1_bar);
     auto MRadaptation = samurai::make_MRAdapt(grad_alpha1_bar);
     MRadaptation(1e-5, 0, conserved_variables, alpha1_bar);
@@ -386,13 +391,13 @@ void StaticBubble<dim>::run() {
     H.resize();
     update_geometry();
 
-    // Apply the numerical scheme without relaxation
+    /*--- Apply the numerical scheme without relaxation (first stage) ---*/
     samurai::update_ghost_mr(conserved_variables);
     auto flux_conserved = numerical_flux(conserved_variables);
-    conserved_variables_np1.resize();
-    conserved_variables_np1 = conserved_variables - dt*flux_conserved;
+    conserved_variables_tmp.resize();
+    conserved_variables_tmp = conserved_variables - dt*flux_conserved;
 
-    std::swap(conserved_variables.array(), conserved_variables_np1.array());
+    std::swap(conserved_variables.array(), conserved_variables_tmp.array());
 
     // Sanity check (and numerical artefacts to clear data) after hyperbolic step
     // and before Newton loop (if desired).
@@ -410,7 +415,7 @@ void StaticBubble<dim>::run() {
                              // Sanity check for m1
                              if(conserved_variables[cell][M1_INDEX] < 0.0) {
                                if(conserved_variables[cell][M1_INDEX] < -1e-14) {
-                                 std::cerr << "Negative mass for phase 1" << std::endl;
+                                 std::cerr << "Negative mass for phase 1 at the beginning of the relaxation" << std::endl;
                                  exit(1);
                                }
                                conserved_variables[cell][M1_INDEX] = 0.0;
@@ -418,7 +423,7 @@ void StaticBubble<dim>::run() {
                              // Sanity check for m2
                              if(conserved_variables[cell][M2_INDEX] < 0.0) {
                                if(conserved_variables[cell][M2_INDEX] < -1e-14) {
-                                 std::cerr << "Negative mass for phase 2" << std::endl;
+                                 std::cerr << "Negative mass for phase 2 at the beginning of the relaxation" << std::endl;
                                  exit(1);
                                }
                                conserved_variables[cell][M2_INDEX] = 0.0;
@@ -451,11 +456,77 @@ void StaticBubble<dim>::run() {
       update_geometry();
     }
 
-    // Compute updated time step
+    /*--- Apply the numerical scheme without relaxation (second stage) ---*/
+    samurai::update_ghost_mr(conserved_variables);
+    flux_conserved = numerical_flux(conserved_variables);
+    conserved_variables_np1.resize();
+    conserved_variables_np1 = conserved_variables - dt*flux_conserved;
+    conserved_variables_np1 = 0.5*(conserved_variables_tmp + conserved_variables_np1);
+
+    std::swap(conserved_variables.array(), conserved_variables_np1.array());
+
+    // Sanity check (and numerical artefacts to clear data) after hyperbolic step
+    // and before Newton loop (if desired).
+    samurai::for_each_cell(mesh,
+                           [&](const auto& cell)
+                           {
+                             // Start with rho_alpha1_bar
+                             if(conserved_variables[cell][RHO_ALPHA1_BAR_INDEX] < 0.0) {
+                               if(conserved_variables[cell][RHO_ALPHA1_BAR_INDEX] < -1e-10) {
+                                 std::cerr << " Negative large-scale mass phaase 1 at the beginning of the relaxation" << std::endl;
+                                 exit(1);
+                               }
+                               conserved_variables[cell][RHO_ALPHA1_BAR_INDEX] = 0.0;
+                             }
+                             // Sanity check for m1
+                             if(conserved_variables[cell][M1_INDEX] < 0.0) {
+                               if(conserved_variables[cell][M1_INDEX] < -1e-14) {
+                                 std::cerr << "Negative mass for phase 1 at the beginning of the relaxation" << std::endl;
+                                 exit(1);
+                               }
+                               conserved_variables[cell][M1_INDEX] = 0.0;
+                             }
+                             // Sanity check for m2
+                             if(conserved_variables[cell][M2_INDEX] < 0.0) {
+                               if(conserved_variables[cell][M2_INDEX] < -1e-14) {
+                                 std::cerr << "Negative mass for phase 2 at the beginning of the relaxation" << std::endl;
+                                 exit(1);
+                               }
+                               conserved_variables[cell][M2_INDEX] = 0.0;
+                             }
+                             // Sanity check for alpha1_d
+                             if(conserved_variables[cell][ALPHA1_D_INDEX] > 1.0) {
+                               std::cerr << "Exceding value for small-scale volume fraction at the beginning of the relaxation" << std::endl;
+                               exit(1);
+                             }
+
+                             const auto rho = conserved_variables[cell][M1_INDEX]
+                                            + conserved_variables[cell][M2_INDEX]
+                                            + conserved_variables[cell][M1_D_INDEX];
+
+                             alpha1_bar[cell] = std::min(std::max(0.0, conserved_variables[cell][RHO_ALPHA1_BAR_INDEX]/rho), 1.0);
+                           });
+    update_geometry();
+
+    if(apply_relax) {
+      // Apply relaxation if desired, which will modify alpha1_bar and, consequently, for what
+      // concerns next time step, rho_alpha1_bar
+      // (as well as grad_alpha1_bar, updated dynamically in Newton since curvature potentially changes)
+      dalpha1_bar.resize();
+      samurai::for_each_cell(mesh,
+                             [&](const auto& cell)
+                             {
+                               dalpha1_bar[cell] = std::numeric_limits<double>::infinity();
+                             });
+      apply_relaxation();
+      update_geometry();
+    }
+
+    /*--- Compute updated time step ---*/
     dx = samurai::cell_length(mesh[mesh_id_t::cells].max_level());
     dt = std::min(dt, cfl*dx/get_max_lambda());
 
-    // Save the results
+    /*--- Save the results ---*/
     if(t >= static_cast<double>(nsave + 1) * dt_save || t == Tf) {
       const std::string suffix = (nfiles != 1) ? fmt::format("_min_level_{}_max_level_{}_ite_{}", mesh.min_level(), mesh.max_level(), ++nsave) : "";
       save(path, filename, suffix, conserved_variables, alpha1_bar, grad_alpha1_bar, normal, H);

@@ -55,7 +55,7 @@ namespace samurai {
     static_assert(field_size == EquationData::NVARS, "The number of elements in the state does not correpsond to the number of equations");
     static_assert(Field::dim == EquationData::dim, "The spatial dimesions do not match");
     static constexpr std::size_t output_field_size = field_size;
-    static constexpr std::size_t stencil_size      = 2;
+    static constexpr std::size_t stencil_size      = 4;
 
     using cfg = FluxConfig<SchemeType::NonLinear, output_field_size, stencil_size, Field>;
 
@@ -70,8 +70,10 @@ namespace samurai {
 
     void perform_Newton_step_relaxation(auto conserved_variables, const auto H,
                                         auto& dalpha1_bar, auto& alpha1_bar, bool& relaxation_applied,
-                                        const double tol = 1e-8, const double lambda = 0.9); // Perform a Newton step relaxation for a state vector (it is not a real space dependent procedure,
-                                                                                             // but I need to be able to do it inside the flux location for MUSCL reconstruction)
+                                        const double tol = 1e-8, const double lambda = 0.9); // Perform a Newton step relaxation for a state vector
+                                                                                             // (it is not a real space dependent procedure,
+                                                                                             // but I would need to be able to do it inside the flux location
+                                                                                             // for MUSCL reconstruction)
 
     auto cons2prim(const auto& conserved_variables); // Conversion from conserved to primitive variables
 
@@ -290,16 +292,16 @@ namespace samurai {
 
     // Focus now on large-scale partial masses
     const auto alpha1 = primitive_variables(ALPHA1_BAR_INDEX)*(1.0 - primitive_variables(ALPHA1_D_INDEX));
-    const auto p1     = alpha1 > eps ?
-                        (!std::isnan(H) ? primitive_variables(PBAR_INDEX) + (1.0 - primitive_variables(ALPHA1_BAR_INDEX))*EquationData::sigma*H :
-                                          primitive_variables(PBAR_INDEX)) : nan("");
+    const auto p1     = (alpha1 > eps) ?
+                        ((!std::isnan(H)) ? primitive_variables(PBAR_INDEX) + (1.0 - primitive_variables(ALPHA1_BAR_INDEX))*EquationData::sigma*H :
+                                            primitive_variables(PBAR_INDEX)) : nan("");
     const auto rho1   = phase1.rho_value(p1);
     res(M1_INDEX)     = (alpha1 > eps) ? alpha1*rho1 : 0.0;
 
     const auto alpha2 = 1.0 - alpha1 - primitive_variables(ALPHA1_D_INDEX);
-    const auto p2     = alpha2 > eps ?
-                        (!std::isnan(H) ? primitive_variables(PBAR_INDEX) - primitive_variables(ALPHA1_BAR_INDEX)*EquationData::sigma*H :
-                                          primitive_variables(PBAR_INDEX)) : nan("");
+    const auto p2     = (alpha2 > eps) ?
+                        ((!std::isnan(H)) ? primitive_variables(PBAR_INDEX) - primitive_variables(ALPHA1_BAR_INDEX)*EquationData::sigma*H :
+                                            primitive_variables(PBAR_INDEX)) : nan("");
     const auto rho2   = phase2.rho_value(p2);
     res(M2_INDEX)     = (alpha2 > eps) ? alpha2*rho2 : 0.0;
 
@@ -403,11 +405,40 @@ namespace samurai {
         // Compute now the "discrete" flux function, in this case a Rusanov flux
         Rusanov_f[d].cons_flux_function = [&](auto& cells, const Field& field)
                                           {
-                                            const auto& left  = cells[0];
-                                            const auto& right = cells[1];
+                                            const auto& left_left   = cells[0];
+                                            const auto& left        = cells[1];
+                                            const auto& right       = cells[2];
+                                            const auto& right_right = cells[3];
 
-                                            const auto& qL = this->prim2cons(this->cons2prim(field[left]), H[left]);
-                                            const auto& qR = this->prim2cons(this->cons2prim(field[right]), H[right]);
+                                            FluxValue<typename Flux<Field>::cfg> qL = field[left];
+                                            FluxValue<typename Flux<Field>::cfg> qR = field[right];
+                                            const double beta = 1.0;
+                                            for(std::size_t comp = 0; comp < Field::size; ++comp) {
+                                              if(field[right](comp) - field[left](comp) > 0.0) {
+                                                qL(comp) += 0.5*std::max(0.0, std::max(std::min(beta*(field[left](comp) - field[left_left](comp)),
+                                                                                                field[right](comp) - field[left](comp)),
+                                                                                       std::min(field[left](comp) - field[left_left](comp),
+                                                                                                beta*(field[right](comp) - field[left](comp)))));
+                                              }
+                                              else if(field[right](comp) - field[left](comp) < 0.0) {
+                                                qL(comp) += 0.5*std::min(0.0, std::min(std::max(beta*(field[left](comp) - field[left_left](comp)),
+                                                                                                field[right](comp) - field[left](comp)),
+                                                                                       std::max(field[left](comp) - field[left_left](comp),
+                                                                                                beta*(field[right](comp) - field[left](comp)))));
+                                              }
+                                              if(field[right_right](comp) - field[right](comp) > 0.0) {
+                                                qR(comp) -= 0.5*std::max(0.0, std::max(std::min(beta*(field[right](comp) - field[left](comp)),
+                                                                                                field[right_right](comp) - field[right](comp)),
+                                                                                       std::min(field[right](comp) - field[left](comp),
+                                                                                                beta*(field[right_right](comp) - field[right](comp)))));
+                                              }
+                                              else if(field[right_right](comp) - field[right](comp) < 0.0) {
+                                                qR(comp) -= 0.5*std::min(0.0, std::min(std::max(beta*(field[right](comp) - field[left](comp)),
+                                                                                                field[right_right](comp) - field[right](comp)),
+                                                                                       std::max(field[right](comp) - field[left](comp),
+                                                                                                beta*(field[right_right](comp) - field[right](comp)))));
+                                              }
+                                            }
 
                                             return compute_discrete_flux(qL, qR, d,
                                                                          grad_alpha1_bar[left], grad_alpha1_bar[right]);

@@ -28,7 +28,7 @@ int main(int argc, char* argv[]) {
   CLI11_PARSE(app, argc, argv);
 
   // Output parameters
-  std::size_t nfiles = 100;
+  std::size_t nfiles = 20;
 
   // Create the instance of the class to perform the simulation
   auto StaticBubble_Sim = StaticBubble(min_corner, max_corner, min_level, max_level,
