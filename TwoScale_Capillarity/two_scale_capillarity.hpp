@@ -27,7 +27,7 @@ using namespace EquationData;
 template<std::size_t dim>
 class TwoScaleCapillarity {
 public:
-  using Config = samurai::MRConfig<dim, 2>;
+  using Config = samurai::MRConfig<dim, 2, 2, 2>;
 
   TwoScaleCapillarity() = default; // Default constructor. This will do nothing
                                    // and basically will never be used
@@ -276,7 +276,7 @@ void TwoScaleCapillarity<dim>::init_variables() {
                          });
 
   // Apply bcs
-  const samurai::DirectionVector<dim> left = {-1, 0};
+  const samurai::DirectionVector<dim> left  = {-1, 0};
   const samurai::DirectionVector<dim> right = {1, 0};
   samurai::make_bc<samurai::Dirichlet<1>>(conserved_variables, 0.0, 1.0*EOS_phase2.get_rho0(), 0.0, 0.0, 0.0, 0.0, EOS_phase2.get_rho0()*U_0, 0.0)->on(left);
   samurai::make_bc<samurai::Neumann<1>>(conserved_variables, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)->on(right);
@@ -413,6 +413,8 @@ void TwoScaleCapillarity<dim>::apply_relaxation() {
                                                    (rho1*EquationData::sigma*dH[cell]);
                                  if(dtau_ov_epsilon < 0.0) {
                                    std::cerr << "Negative time step found after relaxation of mass of large-scale phase 1" << std::endl;
+                                   save(fs::current_path(), "FV_two_scale_capillarity", "_diverged",
+                                        conserved_variables, alpha1_bar);
                                    exit(1);
                                  }
 
@@ -426,6 +428,8 @@ void TwoScaleCapillarity<dim>::apply_relaxation() {
                                    dtau_ov_epsilon          = std::min(dtau_ov_epsilon, dtau_ov_epsilon_tmp);
                                    if(dtau_ov_epsilon < 0.0) {
                                      std::cerr << "Negative time step found after relaxation of velocity" << std::endl;
+                                     save(fs::current_path(), "FV_two_scale_capillarity", "_diverged",
+                                          conserved_variables, alpha1_bar);
                                      exit(1);
                                    }
                                  }
@@ -442,6 +446,8 @@ void TwoScaleCapillarity<dim>::apply_relaxation() {
                                  }
                                  if(dtau_ov_epsilon < 0.0) {
                                    std::cerr << "Negative time step found after relaxation of small-scale volume fraction" << std::endl;
+                                   save(fs::current_path(), "FV_two_scale_capillarity", "_diverged",
+                                        conserved_variables, alpha1_bar);
                                    exit(1);
                                  }
                                }
@@ -480,6 +486,8 @@ void TwoScaleCapillarity<dim>::apply_relaxation() {
                                dtau_ov_epsilon = std::min(dtau_ov_epsilon, dtau_ov_epsilon_tmp);
                                if(dtau_ov_epsilon < 0.0) {
                                  std::cerr << "Negative time step found after relaxation of large-scale volume fraction" << std::endl;
+                                 save(fs::current_path(), "FV_two_scale_capillarity", "_diverged",
+                                      conserved_variables, alpha1_bar);
                                  exit(1);
                                }
 
@@ -496,10 +504,12 @@ void TwoScaleCapillarity<dim>::apply_relaxation() {
 
                                  const auto num_dalpha1_bar = dtau_ov_epsilon/(1.0 - conserved_variables[cell][ALPHA1_D_INDEX]);
                                  const auto den_dalpha1_bar = 1.0 - dtau_ov_epsilon*dF_dalpha1_bar/(1.0 - conserved_variables[cell][ALPHA1_D_INDEX]);
-                                 dalpha1_bar[cell]          = (num_dalpha1_bar/den_dalpha1_bar)*(F - dm1*(dF_dm1 + dtau_ov_epsilon*(dF_dalpha1d/rho1d)));
+                                 dalpha1_bar[cell]          = (num_dalpha1_bar/den_dalpha1_bar)*(F - dm1*R);
 
                                  if(dm1 > 0.0) {
                                    std::cerr << "Negative sign of mass transfer inside Newton step" << std::endl;
+                                   save(fs::current_path(), "FV_two_scale_capillarity", "_diverged",
+                                        conserved_variables, alpha1_bar);
                                    exit(1);
                                  }
                                  else {
@@ -515,6 +525,8 @@ void TwoScaleCapillarity<dim>::apply_relaxation() {
 
                                  if(conserved_variables[cell][ALPHA1_D_INDEX] - dm1/rho1d > 1.0) {
                                    std::cerr << "Exceeding value for small-scale volume fraction inside Newton step " << std::endl;
+                                   save(fs::current_path(), "FV_two_scale_capillarity", "_diverged",
+                                        conserved_variables, alpha1_bar);
                                    exit(1);
                                  }
                                  else {
@@ -567,7 +579,7 @@ void TwoScaleCapillarity<dim>::apply_relaxation() {
     if(Newton_iter > 60) {
       std::cout << "Netwon method not converged" << std::endl;
       save(fs::current_path(), "FV_two_scale_capillarity", "_diverged",
-           conserved_variables, alpha1_bar, grad_alpha1_bar, normal, H, H_lim, mod_grad_alpha1_bar);
+           conserved_variables, alpha1_bar, H, H_lim);
       exit(1);
     }
   }
@@ -629,13 +641,14 @@ void TwoScaleCapillarity<dim>::run() {
     std::cout << fmt::format("Iteration {}: t = {}, dt = {}", ++nt, t, dt) << std::endl;
 
     // Apply mesh adaptation
-    samurai::update_ghost_mr(grad_alpha1_bar);
-    auto MRadaptation = samurai::make_MRAdapt(grad_alpha1_bar);
-    MRadaptation(1e-5, 0, conserved_variables, alpha1_bar);
+    samurai::update_ghost_mr(conserved_variables);
+    auto MRadaptation = samurai::make_MRAdapt(conserved_variables);
+    MRadaptation(1e-5, 0, alpha1_bar);
     // Resize the fields to be recomputed
     normal.resize();
     H.resize();
     H_lim.resize();
+    grad_alpha1_bar.resize();
     mod_grad_alpha1_bar.resize();
     update_geometry();
 
@@ -657,6 +670,8 @@ void TwoScaleCapillarity<dim>::run() {
                              if(conserved_variables[cell][RHO_ALPHA1_BAR_INDEX] < 0.0) {
                                if(conserved_variables[cell][RHO_ALPHA1_BAR_INDEX] < -1e-10) {
                                  std::cerr << " Negative large-scale mass phase 1 at the beginning of the relaxation" << std::endl;
+                                 save(fs::current_path(), "FV_two_scale_capillarity", "_diverged",
+                                      conserved_variables, alpha1_bar);
                                  exit(1);
                                }
                                conserved_variables[cell][RHO_ALPHA1_BAR_INDEX] = 0.0;
@@ -665,6 +680,8 @@ void TwoScaleCapillarity<dim>::run() {
                              if(conserved_variables[cell][M1_INDEX] < 0.0) {
                                if(conserved_variables[cell][M1_INDEX] < -1e-14) {
                                  std::cerr << "Negative mass for phase 1" << std::endl;
+                                 save(fs::current_path(), "FV_two_scale_capillarity", "_diverged",
+                                      conserved_variables, alpha1_bar);
                                  exit(1);
                                }
                                conserved_variables[cell][M1_INDEX] = 0.0;
@@ -673,6 +690,8 @@ void TwoScaleCapillarity<dim>::run() {
                              if(conserved_variables[cell][M2_INDEX] < 0.0) {
                                if(conserved_variables[cell][M2_INDEX] < -1e-14) {
                                  std::cerr << "Negative mass for phase 2" << std::endl;
+                                 save(fs::current_path(), "FV_two_scale_capillarity", "_diverged",
+                                      conserved_variables, alpha1_bar);
                                  exit(1);
                                }
                                conserved_variables[cell][M2_INDEX] = 0.0;
@@ -680,6 +699,8 @@ void TwoScaleCapillarity<dim>::run() {
                              // Sanity check for alpha1_d
                              if(conserved_variables[cell][ALPHA1_D_INDEX] > 1.0) {
                                std::cerr << "Exceding value for small-scale volume fraction" << std::endl;
+                               save(fs::current_path(), "FV_two_scale_capillarity", "_diverged",
+                                    conserved_variables, alpha1_bar);
                                exit(1);
                              }
 
@@ -729,8 +750,11 @@ void TwoScaleCapillarity<dim>::run() {
                                vel[cell][1]   = conserved_variables[cell][RHO_U_INDEX + 1]/rho;
                              });
 
+      samurai::update_ghost_mr(alpha1_d);
       grad_alpha1_d = gradient(alpha1_d);
-      div_vel       = divergence(vel);
+
+      samurai::update_ghost_mr(vel);
+      div_vel = divergence(vel);
 
       samurai::for_each_cell(mesh,
                              [&](const auto& cell)
