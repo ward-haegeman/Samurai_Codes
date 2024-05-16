@@ -231,9 +231,11 @@ namespace samurai {
         // Compute now the "discrete" flux function, in this case a Rusanov flux
         Rusanov_f[d].cons_flux_function = [&](auto& cells, const Field& field)
                                           {
+                                            // Compute the stencil
                                             const auto& left  = cells[0];
                                             const auto& right = cells[1];
 
+                                            // Compute the numerical flux
                                             const auto& qL = field[left];
                                             const auto& qR = field[right];
 

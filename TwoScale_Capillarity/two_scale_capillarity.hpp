@@ -198,7 +198,7 @@ void TwoScaleCapillarity<dim>::init_variables() {
   const double x0    = 1.0;
   const double y0    = 1.0;
   const double R     = 0.15;
-  const double eps_R = 0.6*R;
+  const double eps_R = 0.2*R;
 
   const double U_0 = 6.66;
   const double U_1 = 0.0;
@@ -215,12 +215,10 @@ void TwoScaleCapillarity<dim>::init_variables() {
 
                            const double r = std::sqrt((x - x0)*(x - x0) + (y - y0)*(y - y0));
 
-                           double w = (r >= R - 0.5*eps_R && r < R + 0.5*eps_R) ?
-                                      std::max(0.5 + 0.5*std::tanh(-8.0*((r - R + eps / 2) / eps)), 0.0) :
-                                      ((r < R - 0.5*eps_R) ? 1.0 : 0.0);
-                           if(w < 1e-15) {
-                             w = 0.0;
-                           }
+                           const double w = (r >= R && r < R + eps_R) ?
+                                            std::max(std::exp(2.0*(r - R)*(r - R)/(eps_R*eps_R)*((r - R)*(r - R)/(eps_R*eps_R) - 3.0)/
+                                                              (((r - R)*(r - R)/(eps_R*eps_R) - 1.0)*((r - R)*(r - R)/(eps_R*eps_R) - 1.0))), 0.0) :
+                                            ((r < R) ? 1.0 : 0.0);
 
                            alpha1_bar[cell] = w;
                          });
@@ -238,9 +236,27 @@ void TwoScaleCapillarity<dim>::init_variables() {
                            conserved_variables[cell][SIGMA_D_INDEX]  = 0.0;
                            conserved_variables[cell][M1_D_INDEX]     = conserved_variables[cell][ALPHA1_D_INDEX]*EOS_phase1.get_rho0();
 
+                           // Recompute geometric locations to set partial masses
+                           const auto center = cell.center();
+                           const double x    = center[0];
+                           const double y    = center[1];
+
+                           const double r = std::sqrt((x - x0)*(x - x0) + (y - y0)*(y - y0));
+
                            // Set mass large-scale phase 1
-                           auto p1 = EOS_phase2.get_p0();
-                           p1 += (alpha1_bar[cell] > 1.0 - eps) ? EquationData::sigma/R : ((alpha1_bar[cell] > 0.0) ? EquationData::sigma*H[cell] : 0.0);
+                           double p1;
+                           if(r >= R + eps_R) {
+                             p1 = nan("");
+                           }
+                           else {
+                             p1 = EOS_phase2.get_p0();
+                             if(r >= R && r < R + eps_R) {
+                               p1 += EquationData::sigma*H[cell];
+                             }
+                             else {
+                               p1 += EquationData::sigma/R;
+                             }
+                           }
                            const auto rho1 = EOS_phase1.rho_value(p1);
 
                            conserved_variables[cell][M1_INDEX] = (!std::isnan(rho1)) ?
@@ -248,8 +264,12 @@ void TwoScaleCapillarity<dim>::init_variables() {
                                                                  0.0;
 
                            // Set mass phase 2
-                           conserved_variables[cell][M2_INDEX] = (1.0 - alpha1_bar[cell])*(1.0 - conserved_variables[cell][ALPHA1_D_INDEX])*
-                                                                 EOS_phase2.get_rho0();
+                           const auto p2   = (r >= R) ? EOS_phase2.get_p0() : nan("");
+                           const auto rho2 = EOS_phase2.rho_value(p2);
+
+                           conserved_variables[cell][M2_INDEX] = (!std::isnan(rho2)) ?
+                                                                 (1.0 - alpha1_bar[cell])*(1.0 - conserved_variables[cell][ALPHA1_D_INDEX])*rho2 :
+                                                                 0.0;
 
                            // Set conserved variable associated to large-scale volume fraction
                            const auto rho = conserved_variables[cell][M1_INDEX]
@@ -640,7 +660,7 @@ void TwoScaleCapillarity<dim>::run() {
 
     std::cout << fmt::format("Iteration {}: t = {}, dt = {}", ++nt, t, dt) << std::endl;
 
-    // Apply mesh adaptation
+    /*--- Apply mesh adaptation ---*/
     samurai::update_ghost_mr(conserved_variables);
     auto MRadaptation = samurai::make_MRAdapt(conserved_variables);
     MRadaptation(1e-5, 0, alpha1_bar);
@@ -652,7 +672,7 @@ void TwoScaleCapillarity<dim>::run() {
     mod_grad_alpha1_bar.resize();
     update_geometry();
 
-    // Apply the numerical scheme without relaxation
+    /*--- Apply the numerical scheme without relaxation ---*/
     samurai::update_ghost_mr(conserved_variables);
     samurai::update_bc(conserved_variables);
     auto flux_conserved = numerical_flux(conserved_variables);
@@ -679,7 +699,7 @@ void TwoScaleCapillarity<dim>::run() {
                              // Sanity check for m1
                              if(conserved_variables[cell][M1_INDEX] < 0.0) {
                                if(conserved_variables[cell][M1_INDEX] < -1e-14) {
-                                 std::cerr << "Negative mass for phase 1" << std::endl;
+                                 std::cerr << "Negative mass for phase 1 at the beginning of the relaxation" << std::endl;
                                  save(fs::current_path(), "FV_two_scale_capillarity", "_diverged",
                                       conserved_variables, alpha1_bar);
                                  exit(1);
@@ -689,7 +709,7 @@ void TwoScaleCapillarity<dim>::run() {
                              // Sanity check for m2
                              if(conserved_variables[cell][M2_INDEX] < 0.0) {
                                if(conserved_variables[cell][M2_INDEX] < -1e-14) {
-                                 std::cerr << "Negative mass for phase 2" << std::endl;
+                                 std::cerr << "Negative mass for phase 2 at the beginning of the relaxation" << std::endl;
                                  save(fs::current_path(), "FV_two_scale_capillarity", "_diverged",
                                       conserved_variables, alpha1_bar);
                                  exit(1);
@@ -698,7 +718,7 @@ void TwoScaleCapillarity<dim>::run() {
                              }
                              // Sanity check for alpha1_d
                              if(conserved_variables[cell][ALPHA1_D_INDEX] > 1.0) {
-                               std::cerr << "Exceding value for small-scale volume fraction" << std::endl;
+                               std::cerr << "Exceding value for small-scale volume fraction at the beginning of the relaxation" << std::endl;
                                save(fs::current_path(), "FV_two_scale_capillarity", "_diverged",
                                     conserved_variables, alpha1_bar);
                                exit(1);
@@ -716,7 +736,7 @@ void TwoScaleCapillarity<dim>::run() {
       // Apply relaxation if desired, which will modify alpha1_bar and, consequently, for what
       // concerns next time step, rho_alpha1_bar
       // (as well as grad_alpha1_bar, updated dynamically in Newton since curvature potentially changes),
-      // In the case of mass transfer, also other state varaibles are modified.
+      // In the case of mass transfer, also other state variables are modified.
       dalpha1_bar.resize();
       samurai::for_each_cell(mesh,
                              [&](const auto& cell)
@@ -727,7 +747,7 @@ void TwoScaleCapillarity<dim>::run() {
       update_geometry();
     }
 
-    // Save the results
+    /*--- Save the results ---*/
     if(t >= static_cast<double>(nsave + 1) * dt_save || t == Tf) {
       // Compute small-scale geometric related quantities
       alpha1_d.resize();
@@ -773,7 +793,7 @@ void TwoScaleCapillarity<dim>::run() {
                                    grad_alpha1_d, mod_grad_alpha1_d, vel, div_vel, Dt_alpha1_d, CV_alpha1_d);
     }
 
-    // Compute updated time step
+    /*--- Compute updated time step ---*/
     dx = samurai::cell_length(mesh[mesh_id_t::cells].max_level());
     dt = std::min(Tf - t, cfl*dx/get_max_lambda());
   }
