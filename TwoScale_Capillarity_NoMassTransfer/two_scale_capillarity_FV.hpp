@@ -6,7 +6,7 @@ namespace EquationData {
   static constexpr std::size_t dim = 2;
 
   // Declare parameters related to surface tension coefficient
-  static constexpr double sigma = 1.0;
+  static constexpr double sigma = 1e-2;
 
   // Declare some parameters related to EOS.
   static constexpr double p0_phase1   = 1e5;
@@ -15,8 +15,8 @@ namespace EquationData {
   static constexpr double rho0_phase1 = 1e3;
   static constexpr double rho0_phase2 = 1.0;
 
-  static constexpr double c0_phase1   = 1.5e3;
-  static constexpr double c0_phase2   = 1e2;
+  static constexpr double c0_phase1   = 1e1;
+  static constexpr double c0_phase2   = 1e1;
 
   // Use auxiliary variables for the indices for the sake of generality
   static constexpr std::size_t M1_INDEX             = 0;
@@ -29,15 +29,6 @@ namespace EquationData {
 
   // Save also the total number of (scalar) variables
   static constexpr std::size_t NVARS = 6 + dim;
-
-  // Use auxiliary variables for the indices also fo primitve variables for the sake of generality
-  static constexpr std::size_t VOID_INDEX          = 0;
-  static constexpr std::size_t PBAR_INDEX          = 1;
-  static constexpr std::size_t M1_D_INDEX_PRIM     = 2;
-  static constexpr std::size_t ALPHA1_D_INDEX_PRIM = 3;
-  static constexpr std::size_t SIGMA_D_INDEX_PRIM  = 4;
-  static constexpr std::size_t ALPHA1_BAR_INDEX    = 5;
-  static constexpr std::size_t U_INDEX             = 6;
 }
 
 
@@ -74,10 +65,6 @@ namespace samurai {
                                                                                              // (it is not a real space dependent procedure,
                                                                                              // but I would need to be able to do it inside the flux location
                                                                                              // for MUSCL reconstruction)
-
-    auto cons2prim(const auto& conserved_variables); // Conversion from conserved to primitive variables
-
-    auto prim2cons(const auto& primitive_variables, const auto& H); // Conversion from conserved to primitive variables
 
   protected:
     const BarotropicEOS<>& phase1;
@@ -239,81 +226,6 @@ namespace samurai {
     // Update the vector of conserved variables (probably not the optimal choice since I need this update only at the end of the Newton loop,
     // but the most coherent one thinking about the transfer of mass)
     (*conserved_variables)(RHO_ALPHA1_BAR_INDEX) = rho*alpha1_bar;
-  }
-
-  // Conversion from conserved to primitive variables
-  //
-  template<class Field>
-  auto Flux<Field>::cons2prim(const auto& conserved_variables) {
-    // Create a copy of the state to save the output
-    FluxValue<cfg> res = conserved_variables;
-
-    // Set variables which are already 'primitive'
-    res(M1_D_INDEX_PRIM)     = conserved_variables(M1_D_INDEX);
-    res(ALPHA1_D_INDEX_PRIM) = conserved_variables(ALPHA1_D_INDEX);
-    res(SIGMA_D_INDEX_PRIM)  = conserved_variables(SIGMA_D_INDEX);
-
-    // Focus now on the remaining variables
-    const auto rho   = conserved_variables(M1_INDEX)
-                     + conserved_variables(M2_INDEX)
-                     + conserved_variables(M1_D_INDEX);
-    res(U_INDEX)     = conserved_variables(RHO_U_INDEX)/rho;
-    res(U_INDEX + 1) = conserved_variables(RHO_U_INDEX)/rho;
-
-    const auto alpha1_bar = conserved_variables(RHO_ALPHA1_BAR_INDEX)/rho;
-    res(ALPHA1_BAR_INDEX) = alpha1_bar;
-
-    const auto alpha1 = alpha1_bar*(1.0 - conserved_variables(ALPHA1_D_INDEX));
-    const auto rho1   = (alpha1 > eps) ? conserved_variables(M1_INDEX)/alpha1 : nan("");
-    const auto p1     = phase1.pres_value(rho1);
-
-    const auto alpha2 = 1.0 - alpha1 - conserved_variables(ALPHA1_D_INDEX);
-    const auto rho2   = (alpha2 > eps) ? conserved_variables(M2_INDEX)/alpha2 : nan("");
-    const auto p2     = phase2.pres_value(rho2);
-
-    res(PBAR_INDEX)   = (alpha1 > eps && alpha2 > eps) ?
-                        alpha1_bar*p1 + (1.0 - alpha1_bar)*p2 :
-                        ((alpha1 < eps) ? p2 : p1);
-
-    res(VOID_INDEX)   = 0.0;
-
-    return res;
-  }
-
-  // Conversion from primitive to conserved variables
-  //
-  template<class Field>
-  auto Flux<Field>::prim2cons(const auto& primitive_variables, const auto& H) {
-    // Create a copy of the state to save the output
-    FluxValue<cfg> res = primitive_variables;
-
-    // Set variables which are already 'conserved'
-    res(M1_D_INDEX)     = primitive_variables(M1_D_INDEX_PRIM);
-    res(ALPHA1_D_INDEX) = primitive_variables(ALPHA1_D_INDEX_PRIM);
-    res(SIGMA_D_INDEX)  = primitive_variables(SIGMA_D_INDEX_PRIM);
-
-    // Focus now on large-scale partial masses
-    const auto alpha1 = primitive_variables(ALPHA1_BAR_INDEX)*(1.0 - primitive_variables(ALPHA1_D_INDEX));
-    const auto p1     = (alpha1 > eps) ?
-                        ((!std::isnan(H)) ? primitive_variables(PBAR_INDEX) + (1.0 - primitive_variables(ALPHA1_BAR_INDEX))*EquationData::sigma*H :
-                                            primitive_variables(PBAR_INDEX)) : nan("");
-    const auto rho1   = phase1.rho_value(p1);
-    res(M1_INDEX)     = (alpha1 > eps) ? alpha1*rho1 : 0.0;
-
-    const auto alpha2 = 1.0 - alpha1 - primitive_variables(ALPHA1_D_INDEX);
-    const auto p2     = (alpha2 > eps) ?
-                        ((!std::isnan(H)) ? primitive_variables(PBAR_INDEX) - primitive_variables(ALPHA1_BAR_INDEX)*EquationData::sigma*H :
-                                            primitive_variables(PBAR_INDEX)) : nan("");
-    const auto rho2   = phase2.rho_value(p2);
-    res(M2_INDEX)     = (alpha2 > eps) ? alpha2*rho2 : 0.0;
-
-    // Finally, focus on the large-scale volume fraction and momentum
-    const auto rho            = res(M1_INDEX) + res(M2_INDEX) + res(M1_D_INDEX);
-    res(RHO_ALPHA1_BAR_INDEX) = rho*primitive_variables(ALPHA1_BAR_INDEX);
-    res(RHO_U_INDEX)          = primitive_variables(U_INDEX)*rho;
-    res(RHO_U_INDEX + 1)      = primitive_variables(U_INDEX + 1)*rho;
-
-    return res;
   }
 
 

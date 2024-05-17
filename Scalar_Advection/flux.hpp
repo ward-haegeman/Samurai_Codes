@@ -257,29 +257,29 @@ namespace samurai {
                                                 const double beta = 1.0;
                                                 if(field[right] - field[left] > 0.0) {
                                                   qL += 0.5*std::max(0.0, std::max(std::min(beta*(field[left] - field[left_left]),
-                                                                                                  field[right] - field[left]),
-                                                                                         std::min(field[left] - field[left_left],
-                                                                                                  beta*(field[right] - field[left]))));
+                                                                                            field[right] - field[left]),
+                                                                                   std::min(field[left] - field[left_left],
+                                                                                            beta*(field[right] - field[left]))));
                                                 }
                                                 else if(field[right] - field[left] < 0.0) {
                                                   qL += 0.5*std::min(0.0, std::min(std::max(beta*(field[left] - field[left_left]),
-                                                                                                  field[right] - field[left]),
-                                                                                         std::max(field[left] - field[left_left],
-                                                                                                  beta*(field[right] - field[left]))));
+                                                                                            field[right] - field[left]),
+                                                                                   std::max(field[left] - field[left_left],
+                                                                                            beta*(field[right] - field[left]))));
                                                 }
                                                 if(field[right_right] - field[right] > 0.0) {
                                                   qR -= 0.5*std::max(0.0, std::max(std::min(beta*(field[right] - field[left]),
-                                                                                                  field[right_right] - field[right]),
-                                                                                         std::min(field[right] - field[left],
-                                                                                                  beta*(field[right_right] - field[right]))));
+                                                                                            field[right_right] - field[right]),
+                                                                                   std::min(field[right] - field[left],
+                                                                                            beta*(field[right_right] - field[right]))));
                                                 }
                                                 else if(field[right_right] - field[right] < 0.0) {
                                                   qR -= 0.5*std::min(0.0, std::min(std::max(beta*(field[right] - field[left]),
-                                                                                                  field[right_right] - field[right]),
-                                                                                         std::max(field[right] - field[left],
-                                                                                                  beta*(field[right_right] - field[right]))));
+                                                                                            field[right_right] - field[right]),
+                                                                                   std::max(field[right] - field[left],
+                                                                                            beta*(field[right_right] - field[right]))));
                                                 }
-                                                
+
                                                 const auto& vel_L = vel[left];
                                                 const auto& vel_R = vel[right];
 

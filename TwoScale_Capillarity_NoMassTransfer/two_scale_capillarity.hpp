@@ -23,23 +23,23 @@ namespace fs = std::filesystem;
 using namespace EquationData;
 
 // This is the class for the simulation of a two-scale model
-// for the static bubble
+// with capillarity
 //
 template<std::size_t dim>
-class StaticBubble {
+class TwoScaleCapillarity {
 public:
   using Config = samurai::MRConfig<dim, 2, 2, 2>;
 
-  StaticBubble() = default; // Default constructor. This will do nothing
-                            // and basically will never be used
+  TwoScaleCapillarity() = default; // Default constructor. This will do nothing
+                        // and basically will never be used
 
-  StaticBubble(const xt::xtensor_fixed<double, xt::xshape<dim>>& min_corner,
-               const xt::xtensor_fixed<double, xt::xshape<dim>>& max_corner,
-               std::size_t min_level, std::size_t max_level,
-               double Tf_, double cfl_, std::size_t nfiles_ = 100,
-               bool apply_relax_ = true);                              // Class constrcutor with the arguments related
-                                                                       // to the grid, to the physics and to the relaxation.
-                                                                       // Maybe in the future, we could think to add parameters related to EOS
+  TwoScaleCapillarity(const xt::xtensor_fixed<double, xt::xshape<dim>>& min_corner,
+                      const xt::xtensor_fixed<double, xt::xshape<dim>>& max_corner,
+                      std::size_t min_level, std::size_t max_level,
+                      double Tf_, double cfl_, std::size_t nfiles_ = 100,
+                      bool apply_relax_ = true);                              // Class constrcutor with the arguments related
+                                                                              // to the grid, to the physics and to the relaxation.
+                                                                              // Maybe in the future, we could think to add parameters related to EOS
 
   void run(); // Function which actually executes the temporal loop
 
@@ -108,12 +108,12 @@ private:
 // Implement class constructor
 //
 template<std::size_t dim>
-StaticBubble<dim>::StaticBubble(const xt::xtensor_fixed<double, xt::xshape<dim>>& min_corner,
-                                const xt::xtensor_fixed<double, xt::xshape<dim>>& max_corner,
-                                std::size_t min_level, std::size_t max_level,
-                                double Tf_, double cfl_, std::size_t nfiles_,
-                                bool apply_relax_):
-  box(min_corner, max_corner), mesh(box, min_level, max_level, {false, false}),
+TwoScaleCapillarity<dim>::TwoScaleCapillarity(const xt::xtensor_fixed<double, xt::xshape<dim>>& min_corner,
+                                              const xt::xtensor_fixed<double, xt::xshape<dim>>& max_corner,
+                                              std::size_t min_level, std::size_t max_level,
+                                              double Tf_, double cfl_, std::size_t nfiles_,
+                                              bool apply_relax_):
+  box(min_corner, max_corner), mesh(box, min_level, max_level, {false, true}),
   apply_relax(apply_relax_), Tf(Tf_), cfl(cfl_), nfiles(nfiles_),
   gradient(samurai::make_gradient_order2<decltype(alpha1_bar)>()),
   divergence(samurai::make_divergence_order2<decltype(normal)>()),
@@ -130,7 +130,7 @@ StaticBubble<dim>::StaticBubble(const xt::xtensor_fixed<double, xt::xshape<dim>>
 // Auxiliary routine to compute normals and curvature
 //
 template<std::size_t dim>
-void StaticBubble<dim>::update_geometry() {
+void TwoScaleCapillarity<dim>::update_geometry() {
   samurai::update_ghost_mr(alpha1_bar);
 
   grad_alpha1_bar = gradient(alpha1_bar);
@@ -157,7 +157,7 @@ void StaticBubble<dim>::update_geometry() {
 // Initialization of conserved and auxiliary variables
 //
 template<std::size_t dim>
-void StaticBubble<dim>::init_variables() {
+void TwoScaleCapillarity<dim>::init_variables() {
   // Create conserved and auxiliary fields
   conserved_variables = samurai::make_field<double, EquationData::NVARS>("conserved", mesh);
 
@@ -170,13 +170,12 @@ void StaticBubble<dim>::init_variables() {
 
   // Declare some constant parameters associated to the grid and to the
   // initial state
-  const double L     = 0.75;
-  const double x0    = 0.5*L;
-  const double y0    = 0.5*L;
-  const double R     = 0.2;
+  const double x0    = 1.0;
+  const double y0    = 1.0;
+  const double R     = 0.15;
   const double eps_R = 0.2*R;
 
-  const double U_0 = 0.0;
+  const double U_0 = 6.66;
   const double U_1 = 0.0;
   const double V   = 0.0;
 
@@ -258,15 +257,18 @@ void StaticBubble<dim>::init_variables() {
                            conserved_variables[cell][RHO_U_INDEX + 1] = rho*V;
                          });
 
-  // Consider Dirichlet bcs
-  samurai::make_bc<samurai::Dirichlet<1>>(conserved_variables, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+  // Apply bcs
+  const samurai::DirectionVector<dim> left  = {-1, 0};
+  const samurai::DirectionVector<dim> right = {1, 0};
+  samurai::make_bc<samurai::Dirichlet<1>>(conserved_variables, 0.0, 1.0*EOS_phase2.get_rho0(), 0.0, 0.0, 0.0, 0.0, EOS_phase2.get_rho0()*U_0, 0.0)->on(left);
+  samurai::make_bc<samurai::Neumann<1>>(conserved_variables, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)->on(right);
 }
 
 
 // Compute the estimate of the maximum eigenvalue for CFL condition
 //
 template<std::size_t dim>
-double StaticBubble<dim>::get_max_lambda() const {
+double TwoScaleCapillarity<dim>::get_max_lambda() const {
   double res = 0.0;
 
   samurai::for_each_cell(mesh,
@@ -304,7 +306,7 @@ double StaticBubble<dim>::get_max_lambda() const {
 // Apply the relaxation. This procedure is valid for a generic EOS
 //
 template<std::size_t dim>
-void StaticBubble<dim>::apply_relaxation() {
+void TwoScaleCapillarity<dim>::apply_relaxation() {
   const double tol    = 1e-8; /*--- Tolerance of the Newton method ---*/
   const double lambda = 0.9;  /*--- Parameter for bound preserving strategy ---*/
 
@@ -330,7 +332,7 @@ void StaticBubble<dim>::apply_relaxation() {
     // Newton cycle diverged
     if(Newton_iter > 60) {
       std::cout << "Netwon method not converged in the post-hyperbolic relaxation" << std::endl;
-      save(fs::current_path(), "static_bubble", "_diverged",
+      save(fs::current_path(), "two_scale_capillarity_no_mass_transfer", "_diverged",
            conserved_variables, alpha1_bar, grad_alpha1_bar, normal, H);
       exit(1);
     }
@@ -342,10 +344,10 @@ void StaticBubble<dim>::apply_relaxation() {
 //
 template<std::size_t dim>
 template<class... Variables>
-void StaticBubble<dim>::save(const fs::path& path,
-                                    const std::string& filename,
-                                    const std::string& suffix,
-                                    const Variables&... fields) {
+void TwoScaleCapillarity<dim>::save(const fs::path& path,
+                         const std::string& filename,
+                         const std::string& suffix,
+                         const Variables&... fields) {
   auto level_ = samurai::make_field<std::size_t, 1>("level", mesh);
 
   if(!fs::exists(path)) {
@@ -364,10 +366,10 @@ void StaticBubble<dim>::save(const fs::path& path,
 
 // Implement the function that effectively performs the temporal loop
 template<std::size_t dim>
-void StaticBubble<dim>::run() {
+void TwoScaleCapillarity<dim>::run() {
   // Default output arguemnts
   fs::path path        = fs::current_path();
-  std::string filename = "static_bubble";
+  std::string filename = "two_scale_capillarity_no_mass_transfer";
   const double dt_save = Tf / static_cast<double>(nfiles);
 
   // Auxiliary variables to save updated fields
@@ -378,7 +380,7 @@ void StaticBubble<dim>::run() {
   auto numerical_flux = Rusanov_flux.make_two_scale_capillarity(grad_alpha1_bar);
 
   // Save the initial condition
-  const std::string suffix_init = (nfiles != 1) ? fmt::format("_min_level_{}_max_level_{}_ite_0", mesh.min_level(), mesh.max_level()) : "";
+  const std::string suffix_init = (nfiles != 1) ? fmt::format("_ite_0") : "";
   save(path, filename, suffix_init, conserved_variables, alpha1_bar, grad_alpha1_bar, normal, H);
 
   // Set initial time step
@@ -543,7 +545,7 @@ void StaticBubble<dim>::run() {
 
     /*--- Save the results ---*/
     if(t >= static_cast<double>(nsave + 1) * dt_save || t == Tf) {
-      const std::string suffix = (nfiles != 1) ? fmt::format("_min_level_{}_max_level_{}_ite_{}", mesh.min_level(), mesh.max_level(), ++nsave) : "";
+      const std::string suffix = (nfiles != 1) ? fmt::format("_ite_{}", ++nsave) : "";
       save(path, filename, suffix, conserved_variables, alpha1_bar, grad_alpha1_bar, normal, H);
     }
   }
