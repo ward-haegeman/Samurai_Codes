@@ -79,7 +79,8 @@ namespace samurai {
     const auto rho1   = q(ALPHA1_RHO1_INDEX)/alpha1; /*--- TODO: Add treatment for vanishing volume fraction ---*/
     auto e1           = q(ALPHA1_RHO1_E1_INDEX)/q(ALPHA1_RHO1_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
     for(std::size_t d = 0; d < EquationData::dim; ++d) {
-      e1 -= 0.5*(q(ALPHA1_RHO1_U1_INDEX + d)/q(ALPHA1_RHO1_INDEX))*(q(ALPHA1_RHO1_U1_INDEX + d)/q(ALPHA1_RHO1_INDEX)); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+      e1 -= 0.5*(q(ALPHA1_RHO1_U1_INDEX + d)/q(ALPHA1_RHO1_INDEX))*
+                (q(ALPHA1_RHO1_U1_INDEX + d)/q(ALPHA1_RHO1_INDEX)); /*--- TODO: Add treatment for vanishing volume fraction ---*/
     }
     const auto pres1  = this->phase1.pres_value(rho1, e1);
     const auto vel1_d = q(ALPHA1_RHO1_U1_INDEX + curr_d)/q(ALPHA1_RHO1_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
@@ -102,7 +103,8 @@ namespace samurai {
     const auto rho2   = q(ALPHA2_RHO2_INDEX)/alpha2; /*--- TODO: Add treatment for vanishing volume fraction ---*/
     auto e2           = q(ALPHA2_RHO2_E2_INDEX)/q(ALPHA2_RHO2_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
     for(std::size_t d = 0; d < EquationData::dim; ++d) {
-      e2 -= 0.5*(q(ALPHA2_RHO2_U2_INDEX + d)/q(ALPHA2_RHO2_INDEX))*(q(ALPHA2_RHO2_U2_INDEX + d)/q(ALPHA2_RHO2_INDEX)); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+      e2 -= 0.5*(q(ALPHA2_RHO2_U2_INDEX + d)/q(ALPHA2_RHO2_INDEX))*
+                (q(ALPHA2_RHO2_U2_INDEX + d)/q(ALPHA2_RHO2_INDEX)); /*--- TODO: Add treatment for vanishing volume fraction ---*/
     }
     const auto pres2  = this->phase2.pres_value(rho2, e2);
     const auto vel2_d = q(ALPHA2_RHO2_U2_INDEX + curr_d)/q(ALPHA2_RHO2_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
@@ -156,7 +158,8 @@ namespace samurai {
     const auto rho1L   = qL(ALPHA1_RHO1_INDEX)/qL(ALPHA1_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
     auto e1L           = qL(ALPHA1_RHO1_E1_INDEX)/qL(ALPHA1_RHO1_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
     for(std::size_t d = 0; d < EquationData::dim; ++d) {
-      e1L -= 0.5*(qL(ALPHA1_RHO1_U1_INDEX + d)/qL(ALPHA1_RHO1_INDEX))*(qL(ALPHA1_RHO1_U1_INDEX + d)/qL(ALPHA1_RHO1_INDEX)); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+      e1L -= 0.5*(qL(ALPHA1_RHO1_U1_INDEX + d)/qL(ALPHA1_RHO1_INDEX))*
+                 (qL(ALPHA1_RHO1_U1_INDEX + d)/qL(ALPHA1_RHO1_INDEX)); /*--- TODO: Add treatment for vanishing volume fraction ---*/
     }
     const auto pres1L  = this->phase1.pres_value(rho1L, e1L);
     const auto c1L     = this->phase1.c_value(rho1L, pres1L);
@@ -166,7 +169,8 @@ namespace samurai {
     const auto rho2L   = qL(ALPHA2_RHO2_INDEX)/(1.0 - qL(ALPHA1_INDEX)); /*--- TODO: Add treatment for vanishing volume fraction ---*/
     auto e2L           = qL(ALPHA2_RHO2_E2_INDEX)/qL(ALPHA2_RHO2_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
     for(std::size_t d = 0; d < EquationData::dim; ++d) {
-      e2L -= 0.5*(qL(ALPHA2_RHO2_U2_INDEX + d)/qL(ALPHA2_RHO2_INDEX))*(qL(ALPHA2_RHO2_U2_INDEX + d)/qL(ALPHA2_RHO2_INDEX)); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+      e2L -= 0.5*(qL(ALPHA2_RHO2_U2_INDEX + d)/qL(ALPHA2_RHO2_INDEX))*
+                 (qL(ALPHA2_RHO2_U2_INDEX + d)/qL(ALPHA2_RHO2_INDEX)); /*--- TODO: Add treatment for vanishing volume fraction ---*/
     }
     const auto pres2L  = this->phase2.pres_value(rho2L, e2L);
     const auto c2L     = this->phase2.c_value(rho2L, pres2L);
@@ -176,7 +180,8 @@ namespace samurai {
     const auto rho1R   = qR(ALPHA1_RHO1_INDEX)/qR(ALPHA1_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
     auto e1R           = qR(ALPHA1_RHO1_E1_INDEX)/qR(ALPHA1_RHO1_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
     for(std::size_t d = 0; d < EquationData::dim; ++d) {
-      e1R -= 0.5*(qR(ALPHA1_RHO1_U1_INDEX + d)/qR(ALPHA1_RHO1_INDEX))*(qR(ALPHA1_RHO1_U1_INDEX + d)/qR(ALPHA1_RHO1_INDEX)); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+      e1R -= 0.5*(qR(ALPHA1_RHO1_U1_INDEX + d)/qR(ALPHA1_RHO1_INDEX))*
+                 (qR(ALPHA1_RHO1_U1_INDEX + d)/qR(ALPHA1_RHO1_INDEX)); /*--- TODO: Add treatment for vanishing volume fraction ---*/
     }
     const auto pres1R  = this->phase1.pres_value(rho1R, e1R);
     const auto c1R     = this->phase1.c_value(rho1R, pres1R);
@@ -186,7 +191,8 @@ namespace samurai {
     const auto rho2R   = qR(ALPHA2_RHO2_INDEX)/(1.0 - qR(ALPHA1_INDEX)); /*--- TODO: Add treatment for vanishing volume fraction ---*/
     auto e2R           = qR(ALPHA2_RHO2_E2_INDEX)/qR(ALPHA2_RHO2_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
     for(std::size_t d = 0; d < EquationData::dim; ++d) {
-      e2R -= 0.5*(qR(ALPHA2_RHO2_U2_INDEX + d)/qR(ALPHA2_RHO2_INDEX))*(qR(ALPHA2_RHO2_U2_INDEX + d)/qR(ALPHA2_RHO2_INDEX)); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+      e2R -= 0.5*(qR(ALPHA2_RHO2_U2_INDEX + d)/qR(ALPHA2_RHO2_INDEX))*
+                 (qR(ALPHA2_RHO2_U2_INDEX + d)/qR(ALPHA2_RHO2_INDEX)); /*--- TODO: Add treatment for vanishing volume fraction ---*/
     }
     const auto pres2R  = this->phase2.pres_value(rho2R, e2R);
     const auto c2R     = this->phase2.c_value(rho2R, pres2R);
@@ -272,7 +278,8 @@ namespace samurai {
     const auto rho2L = qL(ALPHA2_RHO2_INDEX)/(1.0 - qL(ALPHA1_INDEX)); /*--- TODO: Add treatment for vanishing volume fraction ---*/
     auto e2L         = qL(ALPHA2_RHO2_E2_INDEX)/qL(ALPHA2_RHO2_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
     for(std::size_t d = 0; d < EquationData::dim; ++d) {
-      e2L -= 0.5*(qL(ALPHA2_RHO2_U2_INDEX + d)/qL(ALPHA2_RHO2_INDEX))*(qL(ALPHA2_RHO2_U2_INDEX + d)/qL(ALPHA2_RHO2_INDEX)); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+      e2L -= 0.5*(qL(ALPHA2_RHO2_U2_INDEX + d)/qL(ALPHA2_RHO2_INDEX))*
+                 (qL(ALPHA2_RHO2_U2_INDEX + d)/qL(ALPHA2_RHO2_INDEX)); /*--- TODO: Add treatment for vanishing volume fraction ---*/
     }
     const auto pIL   = this->phase2.pres_value(rho2L, e2L);
 
@@ -281,7 +288,8 @@ namespace samurai {
     const auto rho2R = qR(ALPHA2_RHO2_INDEX)/(1.0 - qR(ALPHA1_INDEX)); /*--- TODO: Add treatment for vanishing volume fraction ---*/
     auto e2R         = qR(ALPHA2_RHO2_E2_INDEX)/qR(ALPHA2_RHO2_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
     for(std::size_t d = 0; d < EquationData::dim; ++d) {
-      e2R -= 0.5*(qR(ALPHA2_RHO2_U2_INDEX + d)/qR(ALPHA2_RHO2_INDEX))*(qR(ALPHA2_RHO2_U2_INDEX + d)/qR(ALPHA2_RHO2_INDEX)); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+      e2R -= 0.5*(qR(ALPHA2_RHO2_U2_INDEX + d)/qR(ALPHA2_RHO2_INDEX))*
+                 (qR(ALPHA2_RHO2_U2_INDEX + d)/qR(ALPHA2_RHO2_INDEX)); /*--- TODO: Add treatment for vanishing volume fraction ---*/
     }
     const auto pIR   = this->phase2.pres_value(rho2R, e2R);
 
@@ -318,7 +326,8 @@ namespace samurai {
     const auto rho2L = qL(ALPHA2_RHO2_INDEX)/(1.0 - qL(ALPHA1_INDEX)); /*--- TODO: Add treatment for vanishing volume fraction ---*/
     auto e2L         = qL(ALPHA2_RHO2_E2_INDEX)/qL(ALPHA2_RHO2_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
     for(std::size_t d = 0; d < EquationData::dim; ++d) {
-      e2L -= 0.5*(qL(ALPHA2_RHO2_U2_INDEX + d)/qL(ALPHA2_RHO2_INDEX))*(qL(ALPHA2_RHO2_U2_INDEX + d)/qL(ALPHA2_RHO2_INDEX)); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+      e2L -= 0.5*(qL(ALPHA2_RHO2_U2_INDEX + d)/qL(ALPHA2_RHO2_INDEX))*
+                 (qL(ALPHA2_RHO2_U2_INDEX + d)/qL(ALPHA2_RHO2_INDEX)); /*--- TODO: Add treatment for vanishing volume fraction ---*/
     }
     const auto pIL   = this->phase2.pres_value(rho2L, e2L);
 
@@ -327,7 +336,8 @@ namespace samurai {
     const auto rho2R = qR(ALPHA2_RHO2_INDEX)/(1.0 - qR(ALPHA1_INDEX)); /*--- TODO: Add treatment for vanishing volume fraction ---*/
     auto e2R         = qR(ALPHA2_RHO2_E2_INDEX)/qR(ALPHA2_RHO2_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
     for(std::size_t d = 0; d < EquationData::dim; ++d) {
-      e2R -= 0.5*(qR(ALPHA2_RHO2_U2_INDEX + d)/qR(ALPHA2_RHO2_INDEX))*(qR(ALPHA2_RHO2_U2_INDEX + d)/qR(ALPHA2_RHO2_INDEX)); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+      e2R -= 0.5*(qR(ALPHA2_RHO2_U2_INDEX + d)/qR(ALPHA2_RHO2_INDEX))*
+                 (qR(ALPHA2_RHO2_U2_INDEX + d)/qR(ALPHA2_RHO2_INDEX)); /*--- TODO: Add treatment for vanishing volume fraction ---*/
     }
     const auto pIR   = this->phase2.pres_value(rho2R, e2R);
 
@@ -404,36 +414,44 @@ namespace samurai {
     inline T M0(const T nu, const T Me) const;
 
     template<typename T>
-    inline T psi(const T u_star, const T a, const T alphaL, const T alphaR, const T vel_diesis, const T tauL_diesis, const T tauR_diesis) const;
+    inline T psi(const T u_star, const T a, const T alphaL, const T alphaR,
+                 const T vel_diesis, const T tauL_diesis, const T tauR_diesis) const;
 
     template<typename T>
     inline T Psi(const T u_star, const T a1, const T alpha1L, const T alpha1R, const T vel1_diesis,
-                                 const T a2, const T alpha2L, const T alpha2R, const T vel2_diesis, const T tau2L_diesis, const T tau2R_diesis) const;
+                                 const T a2, const T alpha2L, const T alpha2R, const T vel2_diesis,
+                                 const T tau2L_diesis, const T tau2R_diesis) const;
 
     template<typename T>
     inline T dM0_dMe(const T nu, const T Me) const;
 
     template<typename T>
-    inline T dpsi_dustar(const T u_star, const T a, const T alphaL, const T alphaR, const T vel_diesis, const T tauL_diesis, const T tauR_diesis) const;
+    inline T dpsi_dustar(const T u_star, const T a, const T alphaL, const T alphaR, const T vel_diesis,
+                         const T tauL_diesis, const T tauR_diesis) const;
 
     template<typename T>
     inline T dPsi_dustar(const T u_star, const T a1, const T alpha1L, const T alpha1R,
-                                         const T a2, const T alpha2L, const T alpha2R, const T vel2_diesis, const T tau2L_diesis, const T tau2R_diesis) const;
+                                         const T a2, const T alpha2L, const T alpha2R, const T vel2_diesis,
+                                         const T tau2L_diesis, const T tau2R_diesis) const;
 
     template<typename T>
-    T Newton(const T rhs, const T a1, const T alpha1L, const T alpha1R, const T vel1_diesis, const T tau1L_diesis, const T tau1R_diesis,
-                          const T a2, const T alpha2L, const T alpha2R, const T vel2_diesis, const T tau2L_diesis, const T tau2R_diesis, const double eps) const;
+    T Newton(const T rhs, const T a1, const T alpha1L, const T alpha1R,
+                          const T vel1_diesis, const T tau1L_diesis, const T tau1R_diesis,
+                          const T a2, const T alpha2L, const T alpha2R,
+                          const T vel2_diesis, const T tau2L_diesis, const T tau2R_diesis, const double eps) const;
 
     template<typename T>
     void Riemann_solver_phase_vI(const T xi,
-                                 const T alphaL, const T alphaR, const T tauL, const T tauR, const T wL, const T wR, const T pL, const T pR, const T EL, const T ER,
+                                 const T alphaL, const T alphaR, const T tauL, const T tauR,
+                                 const T wL, const T wR, const T pL, const T pR, const T EL, const T ER,
                                  const T a, const T u_star,
                                  T& alpha_m, T& tau_m, T& w_m, T& pres_m, T& E_m,
                                  T& alpha_p, T& tau_p, T& w_p, T& pres_p, T& E_p);
 
     template<typename T>
     void Riemann_solver_phase_pI(const T xi,
-                                 const T alphaL, const T alphaR, const T tauL, const T tauR, const T wL, const T wR, const T pL, const T pR, const T EL, const T ER,
+                                 const T alphaL, const T alphaR, const T tauL, const T tauR,
+                                 const T wL, const T wR, const T pL, const T pR, const T EL, const T ER,
                                  const T w_diesis, const T tauL_diesis, const T tauR_diesis, const T a,
                                  T& alpha_m, T& tau_m, T& w_m, T& pres_m, T& E_m,
                                  T& alpha_p, T& tau_p, T& w_p, T& pres_p, T& E_p);
@@ -462,7 +480,8 @@ namespace samurai {
     const auto E1L     = qL(ALPHA1_RHO1_E1_INDEX)/qL(ALPHA1_RHO1_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
     auto e1L           = E1L;
     for(std::size_t d = 0; d < EquationData::dim; ++d) {
-      e1L -= 0.5*(qL(ALPHA1_RHO1_U1_INDEX + d)/qL(ALPHA1_RHO1_INDEX))*(qL(ALPHA1_RHO1_U1_INDEX + d)/qL(ALPHA1_RHO1_INDEX)); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+      e1L -= 0.5*(qL(ALPHA1_RHO1_U1_INDEX + d)/qL(ALPHA1_RHO1_INDEX))*
+                 (qL(ALPHA1_RHO1_U1_INDEX + d)/qL(ALPHA1_RHO1_INDEX)); /*--- TODO: Add treatment for vanishing volume fraction ---*/
     }
     const auto p1L     = this->phase1.pres_value(rho1L, e1L);
 
@@ -473,7 +492,8 @@ namespace samurai {
     const auto E1R     = qR(ALPHA1_RHO1_E1_INDEX)/qR(ALPHA1_RHO1_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
     auto e1R           = E1R;
     for(std::size_t d = 0; d < EquationData::dim; ++d) {
-      e1R -= 0.5*(qR(ALPHA1_RHO1_U1_INDEX + d)/qR(ALPHA1_RHO1_INDEX))*(qR(ALPHA1_RHO1_U1_INDEX + d)/qR(ALPHA1_RHO1_INDEX)); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+      e1R -= 0.5*(qR(ALPHA1_RHO1_U1_INDEX + d)/qR(ALPHA1_RHO1_INDEX))*
+                 (qR(ALPHA1_RHO1_U1_INDEX + d)/qR(ALPHA1_RHO1_INDEX)); /*--- TODO: Add treatment for vanishing volume fraction ---*/
     }
     const auto p1R     = this->phase1.pres_value(rho1R, e1R);
 
@@ -484,7 +504,8 @@ namespace samurai {
     const auto E2L     = qL(ALPHA2_RHO2_E2_INDEX)/qL(ALPHA2_RHO2_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
     auto e2L           = E2L;
     for(std::size_t d = 0; d < EquationData::dim; ++d) {
-      e2L -= 0.5*(qL(ALPHA2_RHO2_U2_INDEX + d)/qL(ALPHA2_RHO2_INDEX))*(qL(ALPHA2_RHO2_U2_INDEX + d)/qL(ALPHA2_RHO2_INDEX)); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+      e2L -= 0.5*(qL(ALPHA2_RHO2_U2_INDEX + d)/qL(ALPHA2_RHO2_INDEX))*
+                 (qL(ALPHA2_RHO2_U2_INDEX + d)/qL(ALPHA2_RHO2_INDEX)); /*--- TODO: Add treatment for vanishing volume fraction ---*/
     }
     const auto p2L     = this->phase2.pres_value(rho2L, e2L);
 
@@ -495,7 +516,8 @@ namespace samurai {
     const auto E2R     = qR(ALPHA2_RHO2_E2_INDEX)/qR(ALPHA2_RHO2_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
     auto e2R           = E2R;
     for(std::size_t d = 0; d < EquationData::dim; ++d) {
-      e2R -= 0.5*(qR(ALPHA2_RHO2_U2_INDEX + d)/qR(ALPHA2_RHO2_INDEX))*(qR(ALPHA2_RHO2_U2_INDEX + d)/qR(ALPHA2_RHO2_INDEX)); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+      e2R -= 0.5*(qR(ALPHA2_RHO2_U2_INDEX + d)/qR(ALPHA2_RHO2_INDEX))*
+                 (qR(ALPHA2_RHO2_U2_INDEX + d)/qR(ALPHA2_RHO2_INDEX)); /*--- TODO: Add treatment for vanishing volume fraction ---*/
     }
     const auto p2R     = this->phase2.pres_value(rho2R, e2R);
 
@@ -704,7 +726,8 @@ namespace samurai {
   //
   template<class Field>
   template<typename T>
-  inline T RelaxationFlux<Field>::psi(const T u_star, const T a, const T alphaL, const T alphaR, const T vel_diesis, const T tauL_diesis, const T tauR_diesis) const {
+  inline T RelaxationFlux<Field>::psi(const T u_star, const T a, const T alphaL, const T alphaR,
+                                      const T vel_diesis, const T tauL_diesis, const T tauR_diesis) const {
     if(u_star <= vel_diesis) {
       return a*(alphaL + alphaR)*(u_star - vel_diesis) + 2.0*a*a*alphaL*tauL_diesis*M0(alphaL/alphaR, (vel_diesis - u_star)/(a*tauL_diesis));
     }
@@ -718,7 +741,8 @@ namespace samurai {
   template<class Field>
   template<typename T>
   inline T RelaxationFlux<Field>::Psi(const T u_star, const T a1, const T alpha1L, const T alpha1R, const T vel1_diesis,
-                                                      const T a2, const T alpha2L, const T alpha2R, const T vel2_diesis, const T tau2L_diesis, const T tau2R_diesis) const {
+                                                      const T a2, const T alpha2L, const T alpha2R, const T vel2_diesis,
+                                                      const T tau2L_diesis, const T tau2R_diesis) const {
     return a1*(alpha1L + alpha1R)*(u_star - vel1_diesis) + psi(u_star, a2, alpha2L, alpha2R, vel2_diesis, tau2L_diesis, tau2R_diesis);
   }
 
@@ -740,7 +764,8 @@ namespace samurai {
   //
   template<class Field>
   template<typename T>
-  inline T RelaxationFlux<Field>::dpsi_dustar(const T u_star, const T a, const T alphaL, const T alphaR, const T vel_diesis, const T tauL_diesis, const T tauR_diesis) const {
+  inline T RelaxationFlux<Field>::dpsi_dustar(const T u_star, const T a, const T alphaL, const T alphaR, const T vel_diesis,
+                                              const T tauL_diesis, const T tauR_diesis) const {
     if(u_star <= vel_diesis) {
       return a*(alphaL + alphaR) - 2.0*a*alphaL*dM0_dMe(alphaL/alphaR, (vel_diesis - u_star)/(a*tauL_diesis));
     }
@@ -754,7 +779,8 @@ namespace samurai {
   template<class Field>
   template<typename T>
   inline T RelaxationFlux<Field>::dPsi_dustar(const T u_star, const T a1, const T alpha1L, const T alpha1R,
-                                                              const T a2, const T alpha2L, const T alpha2R, const T vel2_diesis, const T tau2L_diesis, const T tau2R_diesis) const {
+                                                              const T a2, const T alpha2L, const T alpha2R, const T vel2_diesis,
+                                                              const T tau2L_diesis, const T tau2R_diesis) const {
     return a1*(alpha1L + alpha1R) + dpsi_dustar(u_star, a2, alpha2L, alpha2R, vel2_diesis, tau2L_diesis, tau2R_diesis);
   }
 
@@ -763,31 +789,53 @@ namespace samurai {
   //
   template<class Field>
   template<typename T>
-  T RelaxationFlux<Field>::Newton(const T rhs, const T a1, const T alpha1L, const T alpha1R, const T vel1_diesis, const T tau1L_diesis, const T tau1R_diesis,
-                                               const T a2, const T alpha2L, const T alpha2R, const T vel2_diesis, const T tau2L_diesis, const T tau2R_diesis, const double eps) const {
+  T RelaxationFlux<Field>::Newton(const T rhs, const T a1, const T alpha1L, const T alpha1R,
+                                               const T vel1_diesis, const T tau1L_diesis, const T tau1R_diesis,
+                                               const T a2, const T alpha2L, const T alpha2R,
+                                               const T vel2_diesis, const T tau2L_diesis, const T tau2R_diesis, const double eps) const {
     if(alpha1L == alpha1R) {
       return vel1_diesis;
     }
     else {
+      /*double u_max = sup;
+      double u_min = inf;*/
+
       unsigned int iter = 0;
       const T xl = std::max(vel1_diesis - a1*tau1L_diesis, vel2_diesis - a2*tau2L_diesis);
       const T xr = std::min(vel1_diesis + a1*tau1R_diesis, vel2_diesis + a2*tau2R_diesis);
 
       T u_star = 0.5*(xl + xr);
 
-      while(iter < 1000 &&
+      T du = -(Psi(u_star, a1, alpha1L, alpha1R, vel1_diesis,
+                           a2, alpha2L, alpha2R, vel2_diesis, tau2L_diesis, tau2R_diesis) - rhs)/
+              (dPsi_dustar(u_star, a1, alpha1L, alpha1R,
+                                   a2, alpha2L, alpha2R, vel2_diesis, tau2L_diesis, tau2R_diesis));
+
+      while(iter < 50 &&
             std::abs(Psi(u_star, a1, alpha1L, alpha1R, vel1_diesis,
-                                 a2, alpha2L, alpha2R, vel2_diesis, tau2L_diesis, tau2R_diesis) - rhs) > eps) {
+                                 a2, alpha2L, alpha2R, vel2_diesis, tau2L_diesis, tau2R_diesis) - rhs) > eps &&
+            std::abs(du) > eps) {
         ++iter;
 
-        u_star -= (Psi(u_star, a1, alpha1L, alpha1R, vel1_diesis,
-                               a2, alpha2L, alpha2R, vel2_diesis, tau2L_diesis, tau2R_diesis) - rhs)/
-                  (dPsi_dustar(u_star, a1, alpha1L, alpha1R,
-                                       a2, alpha2L, alpha2R, vel2_diesis, tau2L_diesis, tau2R_diesis));
+        /*if(du > 0.0) {
+            du = max(du, 0.9*(u_max - u_star));
+            u_min = u_star;
+          }
+        else if(du < 0.0) {
+          du = max(du, 0.9*(u_min - u_star));
+          u_max = u_star;
+        }*/
+
+        u_star += du;
+
+        du = -(Psi(u_star, a1, alpha1L, alpha1R, vel1_diesis,
+                           a2, alpha2L, alpha2R, vel2_diesis, tau2L_diesis, tau2R_diesis) - rhs)/
+              (dPsi_dustar(u_star, a1, alpha1L, alpha1R,
+                                   a2, alpha2L, alpha2R, vel2_diesis, tau2L_diesis, tau2R_diesis));
       }
 
       // Safety check
-      if(iter == 1000) {
+      if(iter == 50) {
         std::cout << "Newton method not converged." << std::endl;
         exit(0);
       }
@@ -802,7 +850,8 @@ namespace samurai {
   template<class Field>
   template<typename T>
   void RelaxationFlux<Field>::Riemann_solver_phase_vI(const T xi,
-                                                      const T alphaL, const T alphaR, const T tauL, const T tauR, const T wL, const T wR, const T pL, const T pR, const T EL, const T ER,
+                                                      const T alphaL, const T alphaR, const T tauL, const T tauR,
+                                                      const T wL, const T wR, const T pL, const T pR, const T EL, const T ER,
                                                       const T a, const T u_star,
                                                       T& alpha_m, T& tau_m, T& w_m, T& pres_m, T& E_m,
                                                       T& alpha_p, T& tau_p, T& w_p, T& pres_p, T& E_p) {
@@ -915,7 +964,8 @@ namespace samurai {
   template<class Field>
   template<typename T>
   void RelaxationFlux<Field>::Riemann_solver_phase_pI(const T xi,
-                                                      const T alphaL, const T alphaR, const T tauL, const T tauR, const T wL, const T wR, const T pL, const T pR, const T EL, const T ER,
+                                                      const T alphaL, const T alphaR, const T tauL, const T tauR,
+                                                      const T wL, const T wR, const T pL, const T pR, const T EL, const T ER,
                                                       const T w_diesis, const T tauL_diesis, const T tauR_diesis, const T a,
                                                       T& alpha_m, T& tau_m, T& w_m, T& pres_m, T& E_m,
                                                       T& alpha_p, T& tau_p, T& w_p, T& pres_p, T& E_p) {

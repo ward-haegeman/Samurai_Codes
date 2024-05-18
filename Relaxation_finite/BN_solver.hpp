@@ -194,12 +194,14 @@ void BN_Solver<dim>::init_variables() {
                            conserved_variables[cell][ALPHA1_RHO1_INDEX]    = conserved_variables[cell][ALPHA1_INDEX]*rho1[cell];
                            conserved_variables[cell][ALPHA1_RHO1_U1_INDEX] = conserved_variables[cell][ALPHA1_RHO1_INDEX]*vel1[cell];
                            const auto e1 = EOS_phase1.e_value(rho1[cell], p1[cell]);
-                           conserved_variables[cell][ALPHA1_RHO1_E1_INDEX] = conserved_variables[cell][ALPHA1_RHO1_INDEX]*(e1 + 0.5*vel1[cell]*vel1[cell]);
+                           conserved_variables[cell][ALPHA1_RHO1_E1_INDEX] = conserved_variables[cell][ALPHA1_RHO1_INDEX]*
+                                                                             (e1 + 0.5*vel1[cell]*vel1[cell]);
 
                            conserved_variables[cell][ALPHA2_RHO2_INDEX]    = (1.0 - conserved_variables[cell][ALPHA1_INDEX])*rho2[cell];
                            conserved_variables[cell][ALPHA2_RHO2_U2_INDEX] = conserved_variables[cell][ALPHA2_RHO2_INDEX]*vel2[cell];
                            const auto e2 = EOS_phase2.e_value(rho2[cell], p2[cell]);
-                           conserved_variables[cell][ALPHA2_RHO2_E2_INDEX] = conserved_variables[cell][ALPHA2_RHO2_INDEX]*(e2 + 0.5*vel2[cell]*vel2[cell]);
+                           conserved_variables[cell][ALPHA2_RHO2_E2_INDEX] = conserved_variables[cell][ALPHA2_RHO2_INDEX]*
+                                                                             (e2 + 0.5*vel2[cell]*vel2[cell]);
 
                            c1[cell] = EOS_phase1.c_value(rho1[cell], p1[cell]);
 
@@ -243,21 +245,42 @@ void BN_Solver<dim>::update_auxiliary_fields() {
   samurai::for_each_cell(mesh,
                          [&](const auto& cell)
                          {
+                           // Resize fields because of multiresolution
+                           rho.resize();
+                           p.resize();
+
+                           rho1.resize();
+                           p1.resize();
+                           c1.resize();
+                           vel1.resize();
+
+                           rho2.resize();
+                           p2.resize();
+                           c2.resize();
+                           vel2.resize();
+
+                           // Compute the fields
                            rho[cell] = conserved_variables[cell][ALPHA1_RHO1_INDEX]
                                      + conserved_variables[cell][ALPHA2_RHO2_INDEX];
 
-                           rho1[cell] = conserved_variables[cell][ALPHA1_RHO1_INDEX]/conserved_variables[cell][ALPHA1_INDEX]; /*--- TODO: Add treatment for vanishing volume fraction ---*/
-                           vel1[cell] = conserved_variables[cell][ALPHA1_RHO1_U1_INDEX]/conserved_variables[cell][ALPHA1_RHO1_INDEX]; /*--- TODO: Add treatment for vanishing volume fraction ---*/
-                           auto e1 = conserved_variables[cell][ALPHA1_RHO1_E1_INDEX]/conserved_variables[cell][ALPHA1_RHO1_INDEX]; /*--- TODO: Add treatment for vanishing volume fraction ---*/
+                           rho1[cell] = conserved_variables[cell][ALPHA1_RHO1_INDEX]/
+                                        conserved_variables[cell][ALPHA1_INDEX]; /*--- TODO: Add treatment for vanishing volume fraction ---*/
+                           vel1[cell] = conserved_variables[cell][ALPHA1_RHO1_U1_INDEX]/
+                                        conserved_variables[cell][ALPHA1_RHO1_INDEX]; /*--- TODO: Add treatment for vanishing volume fraction ---*/
+                           auto e1 = conserved_variables[cell][ALPHA1_RHO1_E1_INDEX]/
+                                     conserved_variables[cell][ALPHA1_RHO1_INDEX]; /*--- TODO: Add treatment for vanishing volume fraction ---*/
                            for(std::size_t d = 0; d < EquationData::dim; ++d) {
                              e1 -= 0.5*vel1[cell]*vel1[cell];
                            }
                            p1[cell] = EOS_phase1.pres_value(rho1[cell], e1);
                            c1[cell] = EOS_phase1.c_value(rho1[cell], p1[cell]);
 
-                           rho2[cell] = conserved_variables[cell][ALPHA2_RHO2_INDEX]/(1.0 - conserved_variables[cell][ALPHA1_INDEX]); /*--- TODO: Add treatment for vanishing volume fraction ---*/
-                           vel2[cell] = conserved_variables[cell][ALPHA2_RHO2_U2_INDEX]/conserved_variables[cell][ALPHA2_RHO2_INDEX]; /*--- TODO: Add treatment for vanishing volume fraction ---*/
-                           auto e2 = conserved_variables[cell][ALPHA2_RHO2_E2_INDEX]/conserved_variables[cell][ALPHA2_RHO2_INDEX]; /*--- TODO: Add treatment for vanishing volume fraction ---*/
+                           rho2[cell] = conserved_variables[cell][ALPHA2_RHO2_INDEX]/
+                                       (1.0 - conserved_variables[cell][ALPHA1_INDEX]); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+                           vel2[cell] = conserved_variables[cell][ALPHA2_RHO2_U2_INDEX]/
+                                        conserved_variables[cell][ALPHA2_RHO2_INDEX]; /*--- TODO: Add treatment for vanishing volume fraction ---*/
+                           auto e2 = conserved_variables[cell][ALPHA2_RHO2_E2_INDEX]/
+                                     conserved_variables[cell][ALPHA2_RHO2_INDEX]; /*--- TODO: Add treatment for vanishing volume fraction ---*/
                            for(std::size_t d = 0; d < EquationData::dim; ++d) {
                              e2 -= 0.5*vel2[cell]*vel2[cell];
                            }
@@ -299,13 +322,13 @@ void BN_Solver<dim>::save(const fs::path& path,
 template<std::size_t dim>
 void BN_Solver<dim>::run() {
   // Default output arguemnts
-  fs::path path        = fs::current_path();
+  fs::path path = fs::current_path();
   #ifdef SULICIU_RELAXATION
     std::string filename = "Relaxation_Suliciu";
   #elifdef RUSANOV_FLUX
     std::string filename = "Rusanov_Flux";
   #endif
-  const double dt_save = Tf / static_cast<double>(nfiles);
+  const double dt_save = Tf/static_cast<double>(nfiles);
 
   // Auxiliary variables to save updated fields
   auto conserved_variables_np1 = samurai::make_field<double, EquationData::NVARS>("conserved_np1", mesh);
@@ -332,7 +355,12 @@ void BN_Solver<dim>::run() {
   std::size_t nt    = 0;
   double t          = 0.0;
   while(t != Tf) {
-    // Apply the numerical scheme
+    /*--- Apply mesh adaptation ---*/
+    samurai::update_ghost_mr(conserved_variables);
+    auto MRadaptation = samurai::make_MRAdapt(conserved_variables);
+    MRadaptation(1e-2, 1);
+
+    /*--- Apply the numerical scheme ---*/
     samurai::update_ghost_mr(conserved_variables);
     samurai::update_bc(conserved_variables);
     #ifdef SULICIU_RELAXATION
@@ -341,6 +369,7 @@ void BN_Solver<dim>::run() {
       const double dt = std::min(Tf - t, cfl*dx/c);
       t += dt;
       std::cout << fmt::format("Iteration {}: t = {}, dt = {}", ++nt, t, dt) << std::endl;
+      conserved_variables_np1.resize();
       conserved_variables_np1 = conserved_variables - dt*Relaxation_Flux;
     #elifdef RUSANOV_FLUX
       auto Cons_Flux    = Rusanov_flux(conserved_variables);
@@ -351,6 +380,7 @@ void BN_Solver<dim>::run() {
       const double dt = std::min(Tf - t, cfl*dx/get_max_lambda());
       t += dt;
       std::cout << fmt::format("Iteration {}: t = {}, dt = {}", ++nt, t, dt) << std::endl;
+      conserved_variables_np1.resize();
       conserved_variables_np1 = conserved_variables - dt*Cons_Flux - dt*NonCons_Flux;
     #endif
 
