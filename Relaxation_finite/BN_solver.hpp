@@ -118,7 +118,7 @@ private:
     Tf(Tf_), cfl(cfl_), nfiles(nfiles_),
     EOS_phase1(EquationData::gamma_1, EquationData::pi_infty_1, EquationData::q_infty_1),
     EOS_phase2(EquationData::gamma_2, EquationData::pi_infty_2, EquationData::q_infty_2),
-    numerical_flux(EOS_phase1, EOS_phase2) {
+    numerical_flux() {
     init_variables();
   }
 #elifdef RUSANOV_FLUX
