@@ -995,16 +995,16 @@ namespace samurai {
 
   		if(xi < wL - a*tauL) {
   			alpha_m = alphaL;
-  			tau_m	  = tauL;
-  			w_m	    = wL;
-  			pres_m	= pL;
-        E_m	    = EL;
+  			tau_m   = tauL;
+  			w_m     = wL;
+  			pres_m  = pL;
+        E_m     = EL;
 
   			alpha_p = alphaL;
-  			tau_p	  = tauL;
-  			w_p	    = wL;
-  			pres_p	= pL;
-        E_p	    = EL;
+  			tau_p   = tauL;
+  			w_p     = wL;
+  			pres_p  = pL;
+        E_p     = EL;
   		}
   		else {
   			if(xi == wL - a*tauL)	{
@@ -1106,43 +1106,43 @@ namespace samurai {
   							else {
   								if(xi > nu*a*M*tauL_diesis*(1.0 + MdL)/(1.0 + nu*M) && xi < wR + a*tauR) {
   									alpha_m = alphaR;
-  									tau_m	  = tauR_diesis + tauL_diesis*(MdL - nu*M)/(1.0 + nu*M);
-  									w_m	    = nu*a*M*tauL_diesis*(1.0 + MdL)/(1.0 + nu*M);
-  									pres_m	= pR - a*(wR - w_m);
+  									tau_m   = tauR_diesis + tauL_diesis*(MdL - nu*M)/(1.0 + nu*M);
+  									w_m     = nu*a*M*tauL_diesis*(1.0 + MdL)/(1.0 + nu*M);
+  									pres_m  = pR - a*(wR - w_m);
                     E_m     = ER - 1.0/a*(pR*wR - pres_m*w_m);
 
   									alpha_p = alphaR;
-  									tau_p	  = tauR_diesis + tauL_diesis*(MdL - nu*M)/(1.0 + nu*M);
-  									w_p	    = nu*a*M*tauL_diesis*(1.0 + MdL)/(1.0 + nu*M);
-  									pres_p	= pR - a*(wR - w_p);
+  									tau_p   = tauR_diesis + tauL_diesis*(MdL - nu*M)/(1.0 + nu*M);
+  									w_p     = nu*a*M*tauL_diesis*(1.0 + MdL)/(1.0 + nu*M);
+  									pres_p  = pR - a*(wR - w_p);
                     E_p     = ER + 1.0/a*(pres_p*w_p - pR*wR);
   								}
   								else {
   									if(xi == wR + a*tauR) {
   										alpha_m = alphaR;
-  										tau_m	  = tauR_diesis + tauL_diesis*(MdL - nu*M)/(1.0 + nu*M);
-  										w_m	    = nu*a*M*tauL_diesis*(1.0 + MdL)/(1.0 + nu*M);
-  										pres_m	= pR - a*(wR - w_m);
+  										tau_m   = tauR_diesis + tauL_diesis*(MdL - nu*M)/(1.0 + nu*M);
+  										w_m     = nu*a*M*tauL_diesis*(1.0 + MdL)/(1.0 + nu*M);
+  										pres_m  = pR - a*(wR - w_m);
                       E_m     = ER + 1.0/a*(pres_m*w_m - pR*wR);
 
   										alpha_p = alphaR;
-  										tau_p	  = tauR;
-  										w_p	    = wR;
-  										pres_p	= pR;
+  										tau_p   = tauR;
+  										w_p     = wR;
+  										pres_p  = pR;
                       E_p     = ER;
   									}
   									else
   									{
   										alpha_m = alphaR;
-  										tau_m	  = tauR;
-  										w_m	    = wR;
-  										pres_m	= pR;
+  										tau_m   = tauR;
+  										w_m     = wR;
+  										pres_m  = pR;
                       E_m     = ER;
 
   										alpha_p = alphaR;
-  										tau_p	  = tauR;
-  										w_p	    = wR;
-  										pres_p	= pR;
+  										tau_p   = tauR;
+  										w_p     = wR;
+  										pres_p  = pR;
                       E_p     = ER;
   									}
   								}
@@ -1155,7 +1155,7 @@ namespace samurai {
   		}
   	}
   	else {
-  		if(w_diesis < 0.0) {
+      if(w_diesis < 0.0) {
         Riemann_solver_phase_pI	(-xi,
                                  alphaR, alphaL, tauR, tauL, -wR, -wL, pR, pL, ER, EL,
                                  -w_diesis, tauR_diesis, tauL_diesis, a,
@@ -1166,107 +1166,107 @@ namespace samurai {
       else {
         if(xi < wL - a*tauL) {
   				alpha_m = alphaL;
-  				tau_m	  = tauL;
-  				w_m	    = wL;
-  				pres_m	= pL;
-  				E_m	    = EL;
+  				tau_m   = tauL;
+  				w_m     = wL;
+  				pres_m  = pL;
+  				E_m     = EL;
 
   				alpha_p = alphaL;
-  				tau_p	  = tauL;
-  				w_p	    = wL;
-  				pres_p	= pL;
-  				E_p	    = EL;
+  				tau_p   = tauL;
+  				w_p     = wL;
+  				pres_p  = pL;
+  				E_p     = EL;
   			}
   			else {
   				if(xi == wL - a*tauL)	{
   					alpha_m = alphaL;
-  					tau_m	  = tauL;
-  					w_m	    = wL;
-  					pres_m	= pL;
-  					E_m	    = EL;
+  					tau_m   = tauL;
+  					w_m     = wL;
+  					pres_m  = pL;
+  					E_m     = EL;
 
   					alpha_p = alphaL;
-  					tau_p	  = tauL_diesis;
-  					w_p	    = 0.0;
-  					pres_p	= pL + a*(wL - w_p);
-  					E_p	    = EL - 1.0/a*(pres_p*w_p - pL*wL);
+  					tau_p   = tauL_diesis;
+  					w_p     = 0.0;
+  					pres_p  = pL + a*(wL - w_p);
+  					E_p     = EL - 1.0/a*(pres_p*w_p - pL*wL);
   				}
   				else {
   					if(xi > wL - a*tauL && xi < 0.0) {
   						alpha_m = alphaL;
-  						tau_m	  = tauL_diesis;
-  						w_m	    = 0.0;
-  						pres_m	= pL + a*(wL - w_m);
-  						E_m	    = EL - 1.0/a*(pres_m*w_m - pL*wL);
+  						tau_m   = tauL_diesis;
+  						w_m     = 0.0;
+  						pres_m  = pL + a*(wL - w_m);
+  						E_m     = EL - 1.0/a*(pres_m*w_m - pL*wL);
 
   						alpha_p = alphaL;
-  						tau_p	  = tauL_diesis;
-  						w_p	    = 0.0;
-  						pres_p	= pL + a*(wL - w_p);
-  						E_p	    = EL - 1.0/a*(pres_p*w_p - pL*wL);
+  						tau_p   = tauL_diesis;
+  						w_p     = 0.0;
+  						pres_p  = pL + a*(wL - w_p);
+  						E_p     = EL - 1.0/a*(pres_p*w_p - pL*wL);
   					}
   					else {
   						if(xi == 0.0)	{
   							alpha_m = alphaL;
-  							tau_m	  = tauL_diesis;
-  							w_m	    = 0.0;
-  							pres_m	= pL + a*(wL - w_m);
-  							E_m	    = EL - 1.0/a*(pres_m*w_m - pL*wL);
+  							tau_m   = tauL_diesis;
+  							w_m     = 0.0;
+  							pres_m  = pL + a*(wL - w_m);
+  							E_m     = EL - 1.0/a*(pres_m*w_m - pL*wL);
 
   							alpha_p = alphaR;
-  							tau_p	  = tauR_diesis;
-  							w_p	    = 0.0;
-  							pres_p	= pR - a*(wR - w_p);
-  							E_p	    = ER + 1.0/a*(pres_p*w_p - pR*wR);
+  							tau_p   = tauR_diesis;
+  							w_p     = 0.0;
+  							pres_p  = pR - a*(wR - w_p);
+  							E_p     = ER + 1.0/a*(pres_p*w_p - pR*wR);
   						}
   						else {
   							if(xi > 0.0 && xi < wR + a*tauR) {
   								alpha_m = alphaR;
-  								tau_m	  = tauR_diesis;
-  								w_m	    = 0.0;
-  								pres_m	= pR - a*(wR - w_m);
-  								E_m	    = ER + 1.0/a*(pres_m*w_m - pR*wR);
+  								tau_m   = tauR_diesis;
+  								w_m     = 0.0;
+  								pres_m  = pR - a*(wR - w_m);
+  								E_m     = ER + 1.0/a*(pres_m*w_m - pR*wR);
 
   								alpha_p = alphaR;
-  								tau_p	  = tauR_diesis;
-  								w_p	    = 0.0;
-  								pres_p	= pR - a*(wR-w_p);
-  								E_p	    = ER + 1.0/a*(pres_p*w_p - pR*wR);
+  								tau_p   = tauR_diesis;
+  								w_p     = 0.0;
+  								pres_p  = pR - a*(wR-w_p);
+  								E_p     = ER + 1.0/a*(pres_p*w_p - pR*wR);
   							}
   							else {
   								if(xi == wR + a*tauR)	{
   									alpha_m = alphaR;
-  									tau_m	  = tauR_diesis;
-  									w_m	    = 0.0;
-  									pres_m	= pR - a*(wR - w_m);
-  									E_m	    = ER + 1.0/a*(pres_m*w_m - pR*wR);
+  									tau_m   = tauR_diesis;
+  									w_m     = 0.0;
+  									pres_m  = pR - a*(wR - w_m);
+  									E_m     = ER + 1.0/a*(pres_m*w_m - pR*wR);
 
   									alpha_p = alphaR;
-  									tau_p	  = tauR;
-  									w_p	    = wR;
-  									pres_p	= pR;
-  									E_p	    = ER;
+  									tau_p   = tauR;
+  									w_p     = wR;
+  									pres_p  = pR;
+  									E_p     = ER;
   								}
   								else {
-  									alpha_m = alphaR;
-  									tau_m	  = tauR;
-  									w_m	    = wR;
-  									pres_m  = pR;
-  									E_m    	= ER;
+  								  alpha_m = alphaR;
+  								  tau_m   = tauR;
+  								  w_m     = wR;
+  								  pres_m  = pR;
+  								  E_m     = ER;
 
-  									alpha_p = alphaR;
-  									tau_p	  = tauR;
-  									w_p	    = wR;
-  									pres_p	= pR;
-  									E_p	    = ER;
+  								  alpha_p = alphaR;
+  								  tau_p   = tauR;
+  								  w_p     = wR;
+  								  pres_p  = pR;
+  								  E_p     = ER;
   								}
   							}
   						}
   					}
-  				}
-  			}
-  		}
-  	}
+          }
+        }
+      }
+    }
   }
 
 } // end namespace samurai
