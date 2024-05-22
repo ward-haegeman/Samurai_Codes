@@ -234,32 +234,13 @@ namespace samurai {
                                   -(*conserved_variables)(M2_INDEX)/((1.0 - alpha1_bar)*(1.0 - alpha1_bar))*
                                    phase2.c_value(rho2)*phase2.c_value(rho2);
 
-      /*--- Compute the pseudo time step starting as initial guess from the ideal unmodified Newton method ---*/
-      double dtau_ov_epsilon = std::numeric_limits<double>::infinity();
-
-      // Upper bound of the pseudo time to preserve the bounds for the volume fraction
-      const auto upper_denominator = (F + lambda*(1.0 - alpha1_bar)*dF_dalpha1_bar)/
-                                     (1.0 - (*conserved_variables)(ALPHA1_D_INDEX));
-      if(upper_denominator > 0.0) {
-        dtau_ov_epsilon = lambda*(1.0 - alpha1_bar)/upper_denominator;
-      }
-
-      // Lower bound of the pseudo time to preserve the bounds for the volume fraction
-      const auto lower_denominator = (F - lambda*alpha1_bar*dF_dalpha1_bar)/
-                                     (1.0 - (*conserved_variables)(ALPHA1_D_INDEX));
-      if(lower_denominator < 0.0) {
-        dtau_ov_epsilon = std::min(dtau_ov_epsilon, -lambda*alpha1_bar/lower_denominator);
-      }
-
       // Compute the large scale volume fraction update
-      if(std::isinf(dtau_ov_epsilon)) {
-        dalpha1_bar = -F/dF_dalpha1_bar;
+      dalpha1_bar = -F/dF_dalpha1_bar;
+      if(dalpha1_bar > 0.0) {
+        dalpha1_bar = std::min(dalpha1_bar, lambda*(1.0 - alpha1_bar));
       }
-      else {
-        const auto num_dalpha1_bar = dtau_ov_epsilon/(1.0 - (*conserved_variables)(ALPHA1_D_INDEX));
-        const auto den_dalpha1_bar = 1.0 - num_dalpha1_bar*dF_dalpha1_bar;
-
-        dalpha1_bar = (num_dalpha1_bar/den_dalpha1_bar)*F;
+      else if(dalpha1_bar < 0.0) {
+        dalpha1_bar = std::max(dalpha1_bar, -lambda*alpha1_bar);
       }
 
       if(alpha1_bar + dalpha1_bar < 0.0 || alpha1_bar + dalpha1_bar > 1.0) {
@@ -270,8 +251,7 @@ namespace samurai {
       }
     }
 
-    // Update the vector of conserved variables (probably not the optimal choice since I need this update only at the end of the Newton loop,
-    // but the most coherent one thinking about the transfer of mass)
+    // Update the vector of conserved variables
     (*conserved_variables)(RHO_ALPHA1_BAR_INDEX) = rho*alpha1_bar;
   }
 
@@ -293,7 +273,7 @@ namespace samurai {
                                                                const auto& grad_alpha1_barL,
                                                                const auto& grad_alpha1_barR); // Rusanov flux along direction curr_d
 
-    auto make_two_scale_capillarity(const auto& grad_alpha1_bar); // Compute the flux over all cells
+    auto make_two_scale_capillarity(const auto& grad_alpha1_bar, const auto& H); // Compute the flux over all cells
   };
 
   // Constructor derived from the base class
@@ -349,11 +329,10 @@ namespace samurai {
            0.5*lambda*(qR - qL); // upwinding contribution
   }
 
-
   // Implement the contribution of the discrete flux for all the cells in the mesh.
   //
   template<class Field>
-  auto RusanovFlux<Field>::make_two_scale_capillarity(const auto& grad_alpha1_bar) {
+  auto RusanovFlux<Field>::make_two_scale_capillarity(const auto& grad_alpha1_bar, const auto& H) {
     FluxDefinition<typename Flux<Field>::cfg> Rusanov_f;
 
     // Perform the loop over each dimension to compute the flux contribution
@@ -375,6 +354,7 @@ namespace samurai {
                                             // MUSCL reconstruction
                                             FluxValue<typename Flux<Field>::cfg> qL = field[left];
                                             FluxValue<typename Flux<Field>::cfg> qR = field[right];
+
                                             const double beta = 1.0;
                                             for(std::size_t comp = 0; comp < Field::size; ++comp) {
                                               if(field[right](comp) - field[left](comp) > 0.0) {
@@ -401,6 +381,50 @@ namespace samurai {
                                                                                                 field[right_right](comp) - field[right](comp)),
                                                                                        std::max(field[right](comp) - field[left](comp),
                                                                                                 beta*(field[right_right](comp) - field[right](comp)))));
+                                              }
+                                            }
+
+                                            // Relax the interpolated state
+                                            const double tol    = 1e-12; /*--- Tolerance of the Newton method ---*/
+                                            const double lambda = 0.9;   /*--- Parameter for bound preserving strategy ---*/
+
+                                            // Start with left state
+                                            std::size_t Newton_iter = 0;
+                                            bool relaxation_applied = true;
+                                            double dalpha1_barL     = std::numeric_limits<double>::infinity();
+                                            double alpha1_barL      = qL(RHO_ALPHA1_BAR_INDEX)/
+                                                                      (qL(M1_INDEX) + qL(M2_INDEX) + qL(M1_D_INDEX));
+                                            while(relaxation_applied == true) {
+                                              relaxation_applied = false;
+                                              Newton_iter++;
+
+                                              this->perform_Newton_step_relaxation(std::make_unique<decltype(qL)>(qL), H[left],
+                                                                                   dalpha1_barL, alpha1_barL, relaxation_applied, tol, lambda);
+
+                                              // Newton cycle diverged
+                                              if(Newton_iter > 60) {
+                                                std::cout << "Netwon method not converged in the relaxation of left state after MUSCL" << std::endl;
+                                                exit(1);
+                                              }
+                                            }
+
+                                            // Focus now on right state
+                                            Newton_iter         = 0;
+                                            relaxation_applied  = true;
+                                            double dalpha1_barR = std::numeric_limits<double>::infinity();
+                                            double alpha1_barR  = qR(RHO_ALPHA1_BAR_INDEX)/
+                                                                  (qR(M1_INDEX) + qR(M2_INDEX) + qR(M1_D_INDEX));
+                                            while(relaxation_applied == true) {
+                                              relaxation_applied = false;
+                                              Newton_iter++;
+
+                                              this->perform_Newton_step_relaxation(std::make_unique<decltype(qR)>(qR), H[right],
+                                                                                   dalpha1_barR, alpha1_barR, relaxation_applied, tol, lambda);
+
+                                              // Newton cycle diverged
+                                              if(Newton_iter > 60) {
+                                                std::cout << "Netwon method not converged in the relaxation of right state after MUSCL" << std::endl;
+                                                exit(1);
                                               }
                                             }
 
@@ -432,7 +456,7 @@ namespace samurai {
                                                                const auto& grad_alpha1_barR,
                                                                const bool is_discontinuous); // Godunov flux for the along direction curr_d
 
-    auto make_two_scale_capillarity(const auto& grad_alpha1_bar); // Compute the flux over all cells
+    auto make_two_scale_capillarity(const auto& grad_alpha1_bar, const auto& H); // Compute the flux over all cells
 
   private:
     void solve_alpha1_d_fan(const double rhs, double& alpha1_d); // Newton method to compute alpha1_d for the fan
@@ -942,7 +966,7 @@ namespace samurai {
   // Implement the contribution of the discrete flux for all the cells in the mesh.
   //
   template<class Field>
-  auto GodunovFlux<Field>::make_two_scale_capillarity(const auto& grad_alpha1_bar) {
+  auto GodunovFlux<Field>::make_two_scale_capillarity(const auto& grad_alpha1_bar, const auto& H) {
     FluxDefinition<typename Flux<Field>::cfg> Godunov_f;
 
     // Perform the loop over each dimension to compute the flux contribution
@@ -964,6 +988,7 @@ namespace samurai {
                                             // MUSCL reconstruction
                                             FluxValue<typename Flux<Field>::cfg> qL = field[left];
                                             FluxValue<typename Flux<Field>::cfg> qR = field[right];
+
                                             const double beta = 1.0;
                                             for(std::size_t comp = 0; comp < Field::size; ++comp) {
                                               if(field[right](comp) - field[left](comp) > 0.0) {
@@ -990,6 +1015,50 @@ namespace samurai {
                                                                                                 field[right_right](comp) - field[right](comp)),
                                                                                        std::max(field[right](comp) - field[left](comp),
                                                                                                 beta*(field[right_right](comp) - field[right](comp)))));
+                                              }
+                                            }
+
+                                            // Relax the interpolated state
+                                            const double tol    = 1e-12; /*--- Tolerance of the Newton method ---*/
+                                            const double lambda = 0.9;   /*--- Parameter for bound preserving strategy ---*/
+
+                                            // Start with left state
+                                            std::size_t Newton_iter = 0;
+                                            bool relaxation_applied = true;
+                                            double dalpha1_barL     = std::numeric_limits<double>::infinity();
+                                            double alpha1_barL      = qL(RHO_ALPHA1_BAR_INDEX)/
+                                                                      (qL(M1_INDEX) + qL(M2_INDEX) + qL(M1_D_INDEX));
+                                            while(relaxation_applied == true) {
+                                              relaxation_applied = false;
+                                              Newton_iter++;
+
+                                              this->perform_Newton_step_relaxation(std::make_unique<decltype(qL)>(qL), H[left],
+                                                                                   dalpha1_barL, alpha1_barL, relaxation_applied, tol, lambda);
+
+                                              // Newton cycle diverged
+                                              if(Newton_iter > 60) {
+                                                std::cout << "Netwon method not converged in the relaxation of left state after MUSCL" << std::endl;
+                                                exit(1);
+                                              }
+                                            }
+
+                                            // Focus now on right state
+                                            Newton_iter         = 0;
+                                            relaxation_applied  = true;
+                                            double dalpha1_barR = std::numeric_limits<double>::infinity();
+                                            double alpha1_barR  = qR(RHO_ALPHA1_BAR_INDEX)/
+                                                                  (qR(M1_INDEX) + qR(M2_INDEX) + qR(M1_D_INDEX));
+                                            while(relaxation_applied == true) {
+                                              relaxation_applied = false;
+                                              Newton_iter++;
+
+                                              this->perform_Newton_step_relaxation(std::make_unique<decltype(qR)>(qR), H[right],
+                                                                                   dalpha1_barR, alpha1_barR, relaxation_applied, tol, lambda);
+
+                                              // Newton cycle diverged
+                                              if(Newton_iter > 60) {
+                                                std::cout << "Netwon method not converged in the relaxation of right state after MUSCL" << std::endl;
+                                                exit(1);
                                               }
                                             }
 

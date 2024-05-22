@@ -234,32 +234,13 @@ namespace samurai {
                                   -(*conserved_variables)(M2_INDEX)/((1.0 - alpha1_bar)*(1.0 - alpha1_bar))*
                                    phase2.c_value(rho2)*phase2.c_value(rho2);
 
-      /*--- Compute the pseudo time step starting as initial guess from the ideal unmodified Newton method ---*/
-      double dtau_ov_epsilon = std::numeric_limits<double>::infinity();
-
-      // Upper bound of the pseudo time to preserve the bounds for the volume fraction
-      const auto upper_denominator = (F + lambda*(1.0 - alpha1_bar)*dF_dalpha1_bar)/
-                                     (1.0 - (*conserved_variables)(ALPHA1_D_INDEX));
-      if(upper_denominator > 0.0) {
-        dtau_ov_epsilon = lambda*(1.0 - alpha1_bar)/upper_denominator;
-      }
-
-      // Lower bound of the pseudo time to preserve the bounds for the volume fraction
-      const auto lower_denominator = (F - lambda*alpha1_bar*dF_dalpha1_bar)/
-                                     (1.0 - (*conserved_variables)(ALPHA1_D_INDEX));
-      if(lower_denominator < 0.0) {
-        dtau_ov_epsilon = std::min(dtau_ov_epsilon, -lambda*alpha1_bar/lower_denominator);
-      }
-
       // Compute the large scale volume fraction update
-      if(std::isinf(dtau_ov_epsilon)) {
-        dalpha1_bar = -F/dF_dalpha1_bar;
+      dalpha1_bar = -F/dF_dalpha1_bar;
+      if(dalpha1_bar > 0.0) {
+        dalpha1_bar = std::min(dalpha1_bar, lambda*(1.0 - alpha1_bar));
       }
-      else {
-        const auto num_dalpha1_bar = dtau_ov_epsilon/(1.0 - (*conserved_variables)(ALPHA1_D_INDEX));
-        const auto den_dalpha1_bar = 1.0 - num_dalpha1_bar*dF_dalpha1_bar;
-
-        dalpha1_bar = (num_dalpha1_bar/den_dalpha1_bar)*F;
+      else if(dalpha1_bar < 0.0) {
+        dalpha1_bar = std::max(dalpha1_bar, -lambda*alpha1_bar);
       }
 
       if(alpha1_bar + dalpha1_bar < 0.0 || alpha1_bar + dalpha1_bar > 1.0) {
@@ -270,8 +251,7 @@ namespace samurai {
       }
     }
 
-    // Update the vector of conserved variables (probably not the optimal choice since I need this update only at the end of the Newton loop,
-    // but the most coherent one thinking about the transfer of mass)
+    // Update the vector of conserved variables
     (*conserved_variables)(RHO_ALPHA1_BAR_INDEX) = rho*alpha1_bar;
   }
 
@@ -349,7 +329,6 @@ namespace samurai {
            0.5*lambda*(qR - qL); // upwinding contribution
   }
 
-
   // Implement the contribution of the discrete flux for all the cells in the mesh.
   //
   template<class Field>
@@ -375,6 +354,7 @@ namespace samurai {
                                             // MUSCL reconstruction
                                             FluxValue<typename Flux<Field>::cfg> qL = field[left];
                                             FluxValue<typename Flux<Field>::cfg> qR = field[right];
+
                                             const double beta = 1.0;
                                             for(std::size_t comp = 0; comp < Field::size; ++comp) {
                                               if(field[right](comp) - field[left](comp) > 0.0) {
@@ -1008,6 +988,7 @@ namespace samurai {
                                             // MUSCL reconstruction
                                             FluxValue<typename Flux<Field>::cfg> qL = field[left];
                                             FluxValue<typename Flux<Field>::cfg> qR = field[right];
+
                                             const double beta = 1.0;
                                             for(std::size_t comp = 0; comp < Field::size; ++comp) {
                                               if(field[right](comp) - field[left](comp) > 0.0) {
