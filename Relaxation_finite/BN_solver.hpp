@@ -37,9 +37,9 @@ public:
             const xt::xtensor_fixed<double, xt::xshape<dim>>& max_corner,
             std::size_t min_level, std::size_t max_level,
             double Tf_, double cfl_, std::size_t nfiles_ = 100);  // Class constrcutor with the arguments related
-                                                                   // to the grid and to the physics.
-                                                                   // Maybe in the future,
-                                                                   // we could think to add parameters related to EOS
+                                                                  // to the grid and to the physics.
+                                                                  // Maybe in the future,
+                                                                  // we could think to add parameters related to EOS
 
   void run(); // Function which actually executes the temporal loop
 
@@ -81,8 +81,8 @@ private:
                                                                  // (this is necessary to call 'make_flux')
   #endif
 
-  // Now we declare a bunch of fields which depend from the state, but it is useful
-  // to have it for the output
+  /*-- Now we declare a bunch of fields which depend from the state, but it is useful
+       to have it for the output ---*/
   Field_Scalar rho,
                p,
                rho1,
@@ -118,7 +118,7 @@ private:
     Tf(Tf_), cfl(cfl_), nfiles(nfiles_),
     EOS_phase1(EquationData::gamma_1, EquationData::pi_infty_1, EquationData::q_infty_1),
     EOS_phase2(EquationData::gamma_2, EquationData::pi_infty_2, EquationData::q_infty_2),
-    numerical_flux() {
+    numerical_flux(EOS_phase1, EOS_phase2) {
     init_variables();
   }
 #elifdef RUSANOV_FLUX
@@ -276,7 +276,7 @@ void BN_Solver<dim>::update_auxiliary_fields() {
                            c1[cell] = EOS_phase1.c_value(rho1[cell], p1[cell]);
 
                            rho2[cell] = conserved_variables[cell][ALPHA2_RHO2_INDEX]/
-                                       (1.0 - conserved_variables[cell][ALPHA1_INDEX]); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+                                        (1.0 - conserved_variables[cell][ALPHA1_INDEX]); /*--- TODO: Add treatment for vanishing volume fraction ---*/
                            vel2[cell] = conserved_variables[cell][ALPHA2_RHO2_U2_INDEX]/
                                         conserved_variables[cell][ALPHA2_RHO2_INDEX]; /*--- TODO: Add treatment for vanishing volume fraction ---*/
                            auto e2 = conserved_variables[cell][ALPHA2_RHO2_E2_INDEX]/
