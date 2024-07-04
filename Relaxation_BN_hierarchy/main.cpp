@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 //
-#define FULL_BN
-//#define TOT_ENERGY_6EQS
+//#define FULL_BN
+#define TOT_ENERGY_6EQS
 //#define INT_ENERGY_6EQS
 
 #ifdef FULL_BN
@@ -17,19 +17,20 @@
 // Main function to run the program
 //
 int main(int argc, char* argv[]) {
-  // Mesh parameters
+  /*--- Mesh parameters ---*/
   xt::xtensor_fixed<double, xt::xshape<EquationData::dim>> min_corner = {0.0};
   xt::xtensor_fixed<double, xt::xshape<EquationData::dim>> max_corner = {1.0};
   std::size_t min_level = 12;
   std::size_t max_level = 12;
 
-  // Simulation parameters
-  double Tf  = 240e-6;
-  double cfl = 0.45;
+  /*--- Simulation parameters ---*/
+  double Tf  = 3.2e-3;
+  double cfl = 0.4;
 
-  // Output parameters
+  /*--- Output parameters ---*/
   std::size_t nfiles = 20;
 
+  /*--- Perform the simulation ---*/
   #ifdef FULL_BN
     bool apply_velocity_relax  = true;
     bool apply_pressure_relax  = true;
@@ -52,12 +53,12 @@ int main(int argc, char* argv[]) {
     bool preserve_energy       = false;
 
     // Create the instance of the class to perform the simulation
-    auto Relaxation_Rusanov_Sim = Relaxation(min_corner, max_corner, min_level, max_level,
-                                             Tf, cfl, nfiles,
-                                             apply_pressure_relax, apply_pressure_reinit,
-                                             energy_update_phase_1, preserve_energy);
+    auto Relaxation_Sim = Relaxation(min_corner, max_corner, min_level, max_level,
+                                     Tf, cfl, nfiles,
+                                     apply_pressure_relax, apply_pressure_reinit,
+                                     energy_update_phase_1, preserve_energy);
 
-    Relaxation_Rusanov_Sim.run();
+    Relaxation_Sim.run();
   #elifdef INT_ENERGY_6EQS
     bool apply_pressure_relax  = true;
     bool apply_pressure_reinit = false;
