@@ -548,9 +548,9 @@ namespace samurai {
       }
     }
     q_star(ALPHA1_RHO1_E1_INDEX) = q(ALPHA1_RHO1_INDEX)*((S - vel_d)/(S - S_star))*
-                                   (q(ALPHA1_RHO1_E1_INDEX)/q(ALPHA1_RHO1_INDEX) + (S_star - vel_d)*(S_star + p1/rho1*(S - vel_d)));
+                                   (q(ALPHA1_RHO1_E1_INDEX)/q(ALPHA1_RHO1_INDEX) + (S_star - vel_d)*(S_star + p1/(rho1*(S - vel_d))));
     q_star(ALPHA2_RHO2_E2_INDEX) = q(ALPHA2_RHO2_INDEX)*((S - vel_d)/(S - S_star))*
-                                   (q(ALPHA2_RHO2_E2_INDEX)/q(ALPHA2_RHO2_INDEX) + (S_star - vel_d)*(S_star + p2/rho2*(S - vel_d)));
+                                   (q(ALPHA2_RHO2_E2_INDEX)/q(ALPHA2_RHO2_INDEX) + (S_star - vel_d)*(S_star + p2/(rho2*(S - vel_d))));
 
     return q_star;
   }

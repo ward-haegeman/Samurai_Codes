@@ -14,8 +14,8 @@ namespace fs = std::filesystem;
 
 #include "flux_6eqs.hpp"
 
-//#define HLLC_FLUX
-#define RUSANOV_FLUX
+#define HLLC_FLUX
+//#define RUSANOV_FLUX
 
 // Specify the use of this namespace where we just store the indices
 // and some parameters related to the equations of state
