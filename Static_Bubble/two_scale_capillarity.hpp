@@ -18,8 +18,8 @@ namespace fs = std::filesystem;
 // Add header file for the multiresolution
 #include <samurai/mr/adapt.hpp>
 
-//#define GODUNOV_FLUX
-#define RUSANOV_FLUX
+#define GODUNOV_FLUX
+//#define RUSANOV_FLUX
 
 // Specify the use of this namespace where we just store the indices
 // and, in this case, some parameters related to EOS
@@ -91,6 +91,8 @@ private:
   using divergence_type = decltype(samurai::make_divergence_order2<decltype(normal)>());
   divergence_type divergence;
 
+  const double R; // Bubble radius
+
   double eps;                     // Tolerance when we want to avoid division by zero
   double mod_grad_alpha1_bar_min; // Minimum threshold for which not computing anymore the unit normal
 
@@ -103,6 +105,8 @@ private:
     samurai::GodunovFlux<Field> Godunov_flux; // Auxiliary variable to compute the flux
   #endif
 
+  std::ofstream pressure_data;
+
   /*--- Now, it's time to declare some member functions that we will employ ---*/
   void update_geometry(); // Auxiliary routine to compute normals and curvature
 
@@ -111,8 +115,9 @@ private:
   double get_max_lambda() const; // Compute the estimate of the maximum eigenvalue
 
   void apply_relaxation(); // Apply the relaxation
-};
 
+  void execute_postprocess(const double time); // Execute the postprocess
+};
 
 // Implement class constructor
 //
@@ -127,7 +132,7 @@ private:
     apply_relax(apply_relax_), Tf(Tf_), cfl(cfl_), nfiles(nfiles_),
     gradient(samurai::make_gradient_order2<decltype(alpha1_bar)>()),
     divergence(samurai::make_divergence_order2<decltype(normal)>()),
-    eps(1e-20), mod_grad_alpha1_bar_min(0.0),
+    R(0.15), eps(1e-20), mod_grad_alpha1_bar_min(0.0),
     EOS_phase1(EquationData::p0_phase1, EquationData::rho0_phase1, EquationData::c0_phase1),
     EOS_phase2(EquationData::p0_phase2, EquationData::rho0_phase2, EquationData::c0_phase2),
     Rusanov_flux(EOS_phase1, EOS_phase2, eps, mod_grad_alpha1_bar_min) {
@@ -146,7 +151,7 @@ private:
     apply_relax(apply_relax_), Tf(Tf_), cfl(cfl_), nfiles(nfiles_),
     gradient(samurai::make_gradient_order2<decltype(alpha1_bar)>()),
     divergence(samurai::make_divergence_order2<decltype(normal)>()),
-    eps(1e-20), mod_grad_alpha1_bar_min(0.0),
+    R(0.15), eps(1e-20), mod_grad_alpha1_bar_min(0.0),
     EOS_phase1(EquationData::p0_phase1, EquationData::rho0_phase1, EquationData::c0_phase1),
     EOS_phase2(EquationData::p0_phase2, EquationData::rho0_phase2, EquationData::c0_phase2),
     Godunov_flux(EOS_phase1, EOS_phase2, eps, mod_grad_alpha1_bar_min) {
@@ -155,7 +160,6 @@ private:
       init_variables();
   }
 #endif
-
 
 // Auxiliary routine to compute normals and curvature
 //
@@ -183,7 +187,6 @@ void StaticBubble<dim>::update_geometry() {
   H = -divergence(normal);
 }
 
-
 // Initialization of conserved and auxiliary variables
 //
 template<std::size_t dim>
@@ -207,7 +210,6 @@ void StaticBubble<dim>::init_variables() {
   const double L     = 0.75;
   const double x0    = 0.5*L;
   const double y0    = 0.5*L;
-  const double R     = 0.15;
   const double eps_R = 0.6*R;
 
   const double U_0 = 0.0;
@@ -270,7 +272,6 @@ void StaticBubble<dim>::init_variables() {
   samurai::make_bc<samurai::Dirichlet<1>>(conserved_variables, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
 }
 
-
 // Compute the estimate of the maximum eigenvalue for CFL condition
 //
 template<std::size_t dim>
@@ -307,7 +308,6 @@ double StaticBubble<dim>::get_max_lambda() const {
 
   return res;
 }
-
 
 // Apply the relaxation. This procedure is valid for a generic EOS
 //
@@ -351,15 +351,14 @@ void StaticBubble<dim>::apply_relaxation() {
   }
 }
 
-
 // Save desired fields and info
 //
 template<std::size_t dim>
 template<class... Variables>
 void StaticBubble<dim>::save(const fs::path& path,
-                                    const std::string& filename,
-                                    const std::string& suffix,
-                                    const Variables&... fields) {
+                             const std::string& filename,
+                             const std::string& suffix,
+                             const Variables&... fields) {
   auto level_ = samurai::make_field<std::size_t, 1>("level", mesh);
 
   if(!fs::exists(path)) {
@@ -375,6 +374,31 @@ void StaticBubble<dim>::save(const fs::path& path,
   samurai::save(path, fmt::format("{}{}", filename, suffix), mesh, fields..., level_);
 }
 
+// Execute postprocessing
+//
+template<std::size_t dim>
+void StaticBubble<dim>::execute_postprocess(const double time) {
+  /*--- Threshold to define internal pressure ---*/
+  const double alpha1_int = 0.99;
+
+  /*--- Compute average pressure withint the droplet ---*/
+  double p_in_avg = 0.0;
+  double volume   = 0.0;
+  samurai::for_each_cell(mesh,
+                         [&](const auto& cell)
+                         {
+                           if(alpha1_bar[cell] > alpha1_int) {
+                             p_in_avg += p_bar[cell]*std::pow(cell.length, EquationData::dim);
+                             volume   += std::pow(cell.length, EquationData::dim);
+                           }
+                         });
+  p_in_avg /= volume;
+
+  /*--- Save the data ---*/
+  const double p0   = EOS_phase1.get_p0();
+  const double p_eq = p0 + EquationData::sigma/R;
+  pressure_data << std::fixed << std::setprecision(12) << time << '\t' << p_in_avg - p0 << '\t' << std::abs(p_in_avg - p_eq)/p_eq << std::endl;
+}
 
 // Implement the function that effectively performs the temporal loop
 //
@@ -398,6 +422,9 @@ void StaticBubble<dim>::run() {
   // Save the initial condition
   const std::string suffix_init = (nfiles != 1) ? fmt::format("_min_level_{}_max_level_{}_ite_0", mesh.min_level(), mesh.max_level()) : "";
   save(path, filename, suffix_init, conserved_variables, alpha1_bar, grad_alpha1_bar, normal, H, p1, p2, p_bar);
+  pressure_data.open("pressure_data.dat", std::ofstream::out);
+  double t = 0.0;
+  execute_postprocess(t);
 
   // Set initial time step
   const double dx = samurai::cell_length(mesh[mesh_id_t::cells].max_level());
@@ -406,7 +433,6 @@ void StaticBubble<dim>::run() {
   // Start the loop
   std::size_t nsave = 0;
   std::size_t nt    = 0;
-  double t          = 0.0;
   while(t != Tf) {
     t += dt;
     if(t > Tf) {
@@ -524,6 +550,9 @@ void StaticBubble<dim>::run() {
     /*--- Compute updated time step ---*/
     dt = std::min(Tf - t, cfl*dx/get_max_lambda());
 
+    /*--- Postprocess data ---*/
+    execute_postprocess(t);
+
     /*--- Save the results ---*/
     if(t >= static_cast<double>(nsave + 1) * dt_save || t == Tf) {
       const std::string suffix = (nfiles != 1) ? fmt::format("_min_level_{}_max_level_{}_ite_{}", mesh.min_level(), mesh.max_level(), ++nsave) : "";
@@ -548,4 +577,7 @@ void StaticBubble<dim>::run() {
       save(path, filename, suffix, conserved_variables, alpha1_bar, grad_alpha1_bar, normal, H, p1, p2, p_bar);
     }
   }
+
+  /*--- Close the file with pressure data ---*/
+  pressure_data.close();
 }
