@@ -23,11 +23,11 @@ namespace EquationData {
   /*--- Parameters related to the EOS for the two phases ---*/
   static constexpr double gamma_1    = 2.35;
   static constexpr double pi_infty_1 = 1e9;
-  static constexpr double q_infty_1  = 0.0;
+  static constexpr double q_infty_1  = -1167e3;
 
   static constexpr double gamma_2    = 1.43;
   static constexpr double pi_infty_2 = 0.0;
-  static constexpr double q_infty_2  = 0.0;
+  static constexpr double q_infty_2  = 2030e3;
 }
 
 
@@ -586,6 +586,201 @@ namespace samurai {
                                            flux[1] = -H_plus;
 
                                            return flux;
+                                          };
+      }
+    );
+
+    return make_flux_based_scheme(discrete_flux);
+  }
+
+
+  /**
+    * Implementation of a HLLC flux (just for the conservative part)
+    */
+  template<class Field>
+  class HLLCFlux_Conservative: public Flux<Field> {
+  public:
+    HLLCFlux_Conservative(const EOS<>& EOS_phase1, const EOS<>& EOS_phase2); // Constructor which accepts in inputs the equations of state of the two phases
+
+    FluxValue<typename Flux<Field>::cfg> compute_discrete_flux(const FluxValue<typename Flux<Field>::cfg>& qL,
+                                                               const FluxValue<typename Flux<Field>::cfg>& qR,
+                                                               const std::size_t curr_d); // Compute the flux just for the conservative part
+
+    auto make_flux(); // Compute the flux over all cells
+
+  private:
+    auto compute_middle_state(const FluxValue<typename Flux<Field>::cfg>& q,
+                              const auto S,
+                              const auto S_star,
+                              const std::size_t curr_d); // Compute the middle state
+  };
+
+  // Constructor derived from base class
+  //
+  template<class Field>
+  HLLCFlux_Conservative<Field>::HLLCFlux_Conservative(const EOS<>& EOS_phase1, const EOS<>& EOS_phase2): Flux<Field>(EOS_phase1, EOS_phase2) {}
+
+  // Implementation of a HLLC flux for the conservative part
+  //
+  template<class Field>
+  FluxValue<typename Flux<Field>::cfg> HLLCFlux_Conservative<Field>::compute_discrete_flux(const FluxValue<typename Flux<Field>::cfg>& qL,
+                                                                                           const FluxValue<typename Flux<Field>::cfg>& qR,
+                                                                                           const std::size_t curr_d) {
+    /*--- Compute useful quantites to construct our flux ---*/
+
+    // Save mixture density and velocity current direction left state
+    const auto rhoL   = qL(ALPHA1_RHO1_INDEX) + qL(ALPHA2_RHO2_INDEX);
+    const auto velL_d = qL(RHO_U_INDEX + curr_d)/rhoL;
+
+    // Left state phase 1
+    const auto alpha1L = qL(ALPHA1_INDEX);
+    const auto rho1L   = qL(ALPHA1_RHO1_INDEX)/alpha1L; /*--- TODO: Add treatment for vanishing volume fraction ---*/
+    auto e1L           = qL(ALPHA1_RHO1_E1_INDEX)/qL(ALPHA1_RHO1_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+    for(std::size_t d  = 0; d < EquationData::dim; ++d) {
+      e1L -= 0.5*(qL(RHO_U_INDEX + d)/rhoL)*(qL(RHO_U_INDEX + d)/rhoL);
+    }
+    const auto p1L    = this->phase1.pres_value(rho1L, e1L);
+    const auto c1L    = this->phase1.c_value(rho1L, p1L);
+
+    // Left state phase 2
+    const auto rho2L  = qL(ALPHA2_RHO2_INDEX)/(1.0 - alpha1L); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+    auto e2L          = qL(ALPHA2_RHO2_E2_INDEX)/qL(ALPHA2_RHO2_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+    for(std::size_t d = 0; d < EquationData::dim; ++d) {
+      e2L -= 0.5*(qL(RHO_U_INDEX + d)/rhoL)*(qL(RHO_U_INDEX + d)/rhoL);
+    }
+    const auto p2L    = this->phase2.pres_value(rho2L, e2L);
+    const auto c2L    = this->phase2.c_value(rho2L, p2L);
+
+    // Compute frozen speed of sound and mixture pressure left state
+    const auto Y1L = qL(ALPHA1_RHO1_INDEX)/rhoL;
+    const auto cL  = std::sqrt(Y1L*c1L*c1L + (1.0 - Y1L)*c2L*c2L);
+    const auto pL  = alpha1L*p1L + (1.0 - alpha1L)*p2L;
+
+    // Save mixture density and velocity current direction right state
+    const auto rhoR   = qR(ALPHA1_RHO1_INDEX) + qR(ALPHA2_RHO2_INDEX);
+    const auto velR_d = qR(RHO_U_INDEX + curr_d)/rhoR;
+
+    // Right state phase 1
+    const auto alpha1R = qR(ALPHA1_INDEX);
+    const auto rho1R   = qR(ALPHA1_RHO1_INDEX)/alpha1R; /*--- TODO: Add treatment for vanishing volume fraction ---*/
+    auto e1R           = qR(ALPHA1_RHO1_E1_INDEX)/qR(ALPHA1_RHO1_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+    for(std::size_t d = 0; d < EquationData::dim; ++d) {
+      e1R -= 0.5*(qR(RHO_U_INDEX + d)/rhoR)*(qR(RHO_U_INDEX + d)/rhoR);
+    }
+    const auto p1R     = this->phase1.pres_value(rho1R, e1R);
+    const auto c1R     = this->phase1.c_value(rho1R, p1R);
+
+    // Right state phase 2
+    const auto rho2R   = qR(ALPHA2_RHO2_INDEX)/(1.0 - alpha1R); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+    auto e2R           = qR(ALPHA2_RHO2_E2_INDEX)/qR(ALPHA2_RHO2_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+    for(std::size_t d = 0; d < EquationData::dim; ++d) {
+      e2R -= 0.5*(qR(RHO_U_INDEX + d)/rhoR)*(qR(RHO_U_INDEX + d)/rhoR);
+    }
+    const auto p2R     = this->phase2.pres_value(rho2R, e2R);
+    const auto c2R     = this->phase2.c_value(rho2R, p2R);
+
+    // Compute frozen speed of sound and mixture pressure right state
+    const auto Y1R = qR(ALPHA1_RHO1_INDEX)/rhoR;
+    const auto cR  = std::sqrt(Y1R*c1R*c1R + (1.0 - Y1R)*c2R*c2R);
+    const auto pR  = alpha1R*p1R + (1.0 - alpha1R)*p2R;
+
+    /*--- Compute speeds of wave propagation ---*/
+    const auto sL     = std::min(velL_d - cL, velR_d - cR);
+    const auto sR     = std::max(velL_d + cL, velR_d + cR);
+    const auto s_star = (pR - pL + rhoL*velL_d*(sL - velL_d) - rhoR*velR_d*(sR - velR_d))/
+                        (rhoL*(sL - velL_d) - rhoR*(sR - velR_d));
+
+    /*--- Compute intermediate states ---*/
+    const auto q_star_L = compute_middle_state(qL, sL, s_star, curr_d);
+    const auto q_star_R = compute_middle_state(qR, sR, s_star, curr_d);
+
+    /*--- Compute the fluctuations (wave propagation formalism) ---*/
+    if(sL >= 0.0) {
+      return this->evaluate_continuous_flux(qL, curr_d);
+    }
+    else if(sL < 0.0 && s_star >= 0.0) {
+      return this->evaluate_continuous_flux(q_star_L, curr_d);
+    }
+    else if(s_star < 0.0 && sR >= 0.0) {
+      return this->evaluate_continuous_flux(q_star_R, curr_d);
+    }
+    else if(sR < 0.0) {
+      this->evaluate_continuous_flux(qR, curr_d);
+    }
+  }
+
+  // Implement the auxliary routine that computes the middle state
+  //
+  template<class Field>
+  auto HLLCFlux_Conservative<Field>::compute_middle_state(const FluxValue<typename Flux<Field>::cfg>& q,
+                                                          const auto S,
+                                                          const auto S_star,
+                                                          const std::size_t curr_d) {
+    /*-- Save mixture density and velocity current direction ---*/
+    const auto rho   = q(ALPHA1_RHO1_INDEX) + q(ALPHA2_RHO2_INDEX);
+    const auto vel_d = q(RHO_U_INDEX + curr_d)/rho;
+
+    /*--- Phase 1 ---*/
+    const auto alpha1 = q(ALPHA1_INDEX);
+    const auto rho1   = q(ALPHA1_RHO1_INDEX)/alpha1; /*--- TODO: Add treatment for vanishing volume fraction ---*/
+    auto e1           = q(ALPHA1_RHO1_E1_INDEX)/q(ALPHA1_RHO1_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+    for(std::size_t d = 0; d < EquationData::dim; ++d) {
+      e1 -= 0.5*(q(RHO_U_INDEX + d)/rho)*(q(RHO_U_INDEX + d)/rho);
+    }
+    const auto p1     = this->phase1.pres_value(rho1, e1);
+
+    /*--- Phase 2 ---*/
+    const auto rho2   = q(ALPHA2_RHO2_INDEX)/(1.0 - alpha1); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+    auto e2           = q(ALPHA2_RHO2_E2_INDEX)/q(ALPHA2_RHO2_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+    for(std::size_t d = 0; d < EquationData::dim; ++d) {
+      e2 -= 0.5*(q(RHO_U_INDEX + d)/rho)*(q(RHO_U_INDEX + d)/rho);
+    }
+    const auto p2     = this->phase2.pres_value(rho2, e2);
+
+    /*--- Compute middle state ---*/
+    FluxValue<typename Flux<Field>::cfg> q_star;
+
+    q_star(ALPHA1_INDEX)         = alpha1;
+    q_star(ALPHA1_RHO1_INDEX)    = q(ALPHA1_RHO1_INDEX)*((S - vel_d)/(S - S_star));
+    q_star(ALPHA2_RHO2_INDEX)    = q(ALPHA2_RHO2_INDEX)*((S - vel_d)/(S - S_star));
+    q_star(RHO_U_INDEX + curr_d) = rho*((S - vel_d)/(S - S_star))*S_star;
+    if(EquationData::dim > 1) {
+      for(std::size_t d = 0; d < dim; ++d) {
+        if(d != curr_d) {
+          q_star(RHO_U_INDEX + d) = rho*((S - vel_d)/(S - S_star))*(q(RHO_U_INDEX + d)/rho);
+        }
+      }
+    }
+    q_star(ALPHA1_RHO1_E1_INDEX) = q(ALPHA1_RHO1_INDEX)*((S - vel_d)/(S - S_star))*
+                                   (q(ALPHA1_RHO1_E1_INDEX)/q(ALPHA1_RHO1_INDEX) + (S_star - vel_d)*(S_star + p1/(rho1*(S - vel_d))));
+    q_star(ALPHA2_RHO2_E2_INDEX) = q(ALPHA2_RHO2_INDEX)*((S - vel_d)/(S - S_star))*
+                                   (q(ALPHA2_RHO2_E2_INDEX)/q(ALPHA2_RHO2_INDEX) + (S_star - vel_d)*(S_star + p2/(rho2*(S - vel_d))));
+
+    return q_star;
+  }
+
+  // Implement the contribution of the discrete flux for all the cells in the mesh.
+  //
+  template<class Field>
+  auto HLLCFlux_Conservative<Field>::make_flux() {
+    FluxDefinition<typename Flux<Field>::cfg> discrete_flux;
+
+    /*--- Perform the loop over each dimension to compute the flux contribution ---*/
+    static_for<0, EquationData::dim>::apply(
+      [&](auto integral_constant_d)
+      {
+        static constexpr int d = decltype(integral_constant_d)::value;
+
+        // Compute now the "discrete" flux function
+        discrete_flux[d].cons_flux_function = [&](auto& cells, const Field& field)
+                                              {
+                                                const auto& left  = cells[0];
+                                                const auto& right = cells[1];
+
+                                                const auto& qL = field[left];
+                                                const auto& qR = field[right];
+
+                                                return compute_discrete_flux(qL, qR, d);;
                                           };
       }
     );

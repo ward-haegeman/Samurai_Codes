@@ -15,6 +15,7 @@ namespace fs = std::filesystem;
 #include "flux_6eqs.hpp"
 
 #define HLLC_FLUX
+//#define HLLC_BR_FLUX
 //#define RUSANOV_FLUX
 
 // Specify the use of this namespace where we just store the indices
@@ -84,6 +85,12 @@ private:
   #elifdef HLLC_FLUX
     samurai::HLLCFlux<Field> numerical_flux; // variable to compute the numerical flux
                                              // (this is necessary to call 'make_flux')
+  #elifdef HLLC_BR_FLUX
+    samurai::HLLCFlux_Conservative<Field> numerical_flux_cons; // variable to compute the numerical flux for the conservative part
+                                                               // (this is necessary to call 'make_flux')
+
+    samurai::NonConservativeFlux<Field> numerical_flux_non_cons; // variable to compute the numerical flux for the non-conservative part
+                                                                 // (this is necessary to call 'make_flux')
   #endif
 
   /*--- Now we declare a bunch of fields which depend from the state,
@@ -116,7 +123,7 @@ private:
 
 // Implement class constructor
 //
-#ifdef RUSANOV_FLUX
+#if defined RUSANOV_FLUX || defined HLLC_BR_FLUX
   template<std::size_t dim>
   Relaxation<dim>::Relaxation(const xt::xtensor_fixed<double, xt::xshape<dim>>& min_corner,
                               const xt::xtensor_fixed<double, xt::xshape<dim>>& max_corner,
@@ -520,6 +527,8 @@ void Relaxation<dim>::run() {
     filename = "Relaxation_Rusanov_6eqs_total_energy";
   #elifdef HLLC_FLUX
     filename = "Relaxation_HLLC_6eqs_total_energy";
+  #elifdef HLLC_BR_FLUX
+    filename = "Relaxation_HLLC_BR_6eqs_total_energy";
   #endif
   const double dt_save = Tf / static_cast<double>(nfiles);
 
@@ -531,7 +540,10 @@ void Relaxation<dim>::run() {
     auto Rusanov_flux         = numerical_flux_cons.make_flux();
     auto NonConservative_flux = numerical_flux_non_cons.make_flux();
   #elifdef HLLC_FLUX
-    auto HLCC_flux = numerical_flux.make_flux();
+    auto HLLC_flux = numerical_flux.make_flux();
+  #elifdef HLLC_BR_FLUX
+    auto HLLC_Conservative_flux = numerical_flux_cons.make_flux();
+    auto NonConservative_flux   = numerical_flux_non_cons.make_flux();
   #endif
 
   /*--- Save the initial condition ---*/
@@ -560,8 +572,12 @@ void Relaxation<dim>::run() {
       auto NonCons_Flux       = NonConservative_flux(conserved_variables);
       conserved_variables_np1 = conserved_variables - dt*Cons_Flux - dt*NonCons_Flux;
     #elifdef HLLC_FLUX
-      auto Total_Flux         = HLCC_flux(conserved_variables);
+      auto Total_Flux         = HLLC_flux(conserved_variables);
       conserved_variables_np1 = conserved_variables - dt*Total_Flux;
+    #elifdef HLLC_BR_FLUX
+      auto Cons_Flux          = HLLC_Conservative_flux(conserved_variables);
+      auto NonCons_Flux       = NonConservative_flux(conserved_variables);
+      conserved_variables_np1 = conserved_variables - dt*Cons_Flux - dt*NonCons_Flux;
     #endif
 
     std::swap(conserved_variables.array(), conserved_variables_np1.array());

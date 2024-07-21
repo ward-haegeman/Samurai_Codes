@@ -25,7 +25,7 @@ int main(int argc, char* argv[]) {
 
   /*--- Simulation parameters ---*/
   double Tf  = 3.2e-3;
-  double cfl = 0.4;
+  double cfl = 0.5;
 
   /*--- Output parameters ---*/
   std::size_t nfiles = 20;
