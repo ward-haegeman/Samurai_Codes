@@ -27,7 +27,7 @@ using namespace EquationData;
 template<std::size_t dim>
 class Relaxation {
 public:
-  using Config = samurai::MRConfig<dim>;
+  using Config = samurai::MRConfig<dim, 2>;
 
   Relaxation() = default; // Default constructor. This will do nothing
                           // and basically will never be used
@@ -533,7 +533,9 @@ void Relaxation<dim>::run() {
   const double dt_save = Tf / static_cast<double>(nfiles);
 
   /*--- Auxiliary variables to save updated fields ---*/
-  auto conserved_variables_np1 = samurai::make_field<double, EquationData::NVARS>("conserved_np1", mesh);
+  auto conserved_variables_tmp   = samurai::make_field<double, EquationData::NVARS>("conserved_tmp", mesh);
+  auto conserved_variables_tmp_2 = samurai::make_field<double, EquationData::NVARS>("conserved_tmp_2", mesh);
+  auto conserved_variables_np1   = samurai::make_field<double, EquationData::NVARS>("conserved_np1", mesh);
 
   /*--- Create the flux variables ---*/
   #ifdef RUSANOV_FLUX
@@ -564,26 +566,50 @@ void Relaxation<dim>::run() {
 
     std::cout << fmt::format("Iteration {}: t = {}, dt = {}", ++nt, t, dt) << std::endl;
 
-    // Apply the numerical scheme
+    // Apply the numerical scheme (first stage)
     samurai::update_ghost_mr(conserved_variables);
     samurai::update_bc(conserved_variables);
     #ifdef RUSANOV_FLUX
       auto Cons_Flux          = Rusanov_flux(conserved_variables);
       auto NonCons_Flux       = NonConservative_flux(conserved_variables);
-      conserved_variables_np1 = conserved_variables - dt*Cons_Flux - dt*NonCons_Flux;
+      conserved_variables_tmp = conserved_variables - dt*Cons_Flux - dt*NonCons_Flux;
     #elifdef HLLC_FLUX
       auto Total_Flux         = HLLC_flux(conserved_variables);
-      conserved_variables_np1 = conserved_variables - dt*Total_Flux;
+      conserved_variables_tmp = conserved_variables - dt*Total_Flux;
     #elifdef HLLC_BR_FLUX
       auto Cons_Flux          = HLLC_Conservative_flux(conserved_variables);
       auto NonCons_Flux       = NonConservative_flux(conserved_variables);
-      conserved_variables_np1 = conserved_variables - dt*Cons_Flux - dt*NonCons_Flux;
+      conserved_variables_tmp = conserved_variables - dt*Cons_Flux - dt*NonCons_Flux;
     #endif
 
+    std::swap(conserved_variables.array(), conserved_variables_tmp.array());
+
+    if(apply_pressure_relax) {
+      // Apply the relaxation for the pressure (first stage)
+      update_pressure_before_relaxation();
+      apply_instantaneous_pressure_relaxation();
+    }
+
+    // Apply the numerical scheme (second stage)
+    samurai::update_ghost_mr(conserved_variables);
+    samurai::update_bc(conserved_variables);
+    #ifdef RUSANOV_FLUX
+      Cons_Flux                 = Rusanov_flux(conserved_variables);
+      NonCons_Flux              = NonConservative_flux(conserved_variables);
+      conserved_variables_tmp_2 = conserved_variables - dt*Cons_Flux - dt*NonCons_Flux;
+    #elifdef HLLC_FLUX
+      Total_Flux                = HLLC_flux(conserved_variables);
+      conserved_variables_tmp_2 = conserved_variables - dt*Total_Flux;
+    #elifdef HLLC_BR_FLUX
+      Cons_Flux                 = HLLC_Conservative_flux(conserved_variables);
+      NonCons_Flux              = NonConservative_flux(conserved_variables);
+      conserved_variables_tmp_2 = conserved_variables - dt*Cons_Flux - dt*NonCons_Flux;
+    #endif
+    conserved_variables_np1 = 0.5*(conserved_variables_tmp + conserved_variables_tmp_2);
     std::swap(conserved_variables.array(), conserved_variables_np1.array());
 
     if(apply_pressure_relax) {
-      // Apply the relaxation for the pressure
+      // Apply the relaxation for the pressure (second stage)
       update_pressure_before_relaxation();
       apply_instantaneous_pressure_relaxation();
     }
