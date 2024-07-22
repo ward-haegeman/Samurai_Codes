@@ -21,14 +21,11 @@ namespace EquationData {
   // Use auxiliary variables for the indices for the sake of generality
   static constexpr std::size_t M1_INDEX             = 0;
   static constexpr std::size_t M2_INDEX             = 1;
-  static constexpr std::size_t M1_D_INDEX           = 2;
-  static constexpr std::size_t ALPHA1_D_INDEX       = 3;
-  static constexpr std::size_t SIGMA_D_INDEX        = 4;
-  static constexpr std::size_t RHO_ALPHA1_BAR_INDEX = 5;
-  static constexpr std::size_t RHO_U_INDEX          = 6;
+  static constexpr std::size_t RHO_ALPHA1_BAR_INDEX = 2;
+  static constexpr std::size_t RHO_U_INDEX          = 3;
 
   // Save also the total number of (scalar) variables
-  static constexpr std::size_t NVARS = 6 + dim;
+  static constexpr std::size_t NVARS = 3 + dim;
 }
 
 
@@ -97,15 +94,12 @@ namespace samurai {
     FluxValue<cfg> res = q;
 
     // Compute the current velocity
-    const auto rho   = q(M1_INDEX) + q(M2_INDEX) + q(M1_D_INDEX);
+    const auto rho   = q(M1_INDEX) + q(M2_INDEX);
     const auto vel_d = q(RHO_U_INDEX + curr_d)/rho;
 
     // Multiply the state the velcoity along the direction of interest
     res(M1_INDEX) *= vel_d;
     res(M2_INDEX) *= vel_d;
-    res(M1_D_INDEX) *= vel_d;
-    res(ALPHA1_D_INDEX) *= vel_d;
-    res(SIGMA_D_INDEX) *= vel_d;
     res(RHO_ALPHA1_BAR_INDEX) *= vel_d;
     for(std::size_t d = 0; d < EquationData::dim; ++d) {
       res(RHO_U_INDEX + d) *= vel_d;
@@ -113,11 +107,11 @@ namespace samurai {
 
     // Compute and add the contribution due to the pressure
     const auto alpha1_bar = q(RHO_ALPHA1_BAR_INDEX)/rho;
-    const auto alpha1     = alpha1_bar*(1.0 - q(ALPHA1_D_INDEX));
+    const auto alpha1     = alpha1_bar;
     const auto rho1       = (alpha1 > eps) ? q(M1_INDEX)/alpha1 : nan("");
     const auto p1         = phase1.pres_value(rho1);
 
-    const auto alpha2     = 1.0 - alpha1 - q(ALPHA1_D_INDEX);
+    const auto alpha2     = 1.0 - alpha1;
     const auto rho2       = (alpha2 > eps) ? q(M2_INDEX)/alpha2 : nan("");
     const auto p2         = phase2.pres_value(rho2);
 
@@ -158,15 +152,12 @@ namespace samurai {
     FluxValue<cfg> res = q;
 
     // Compute the current velocity
-    const auto rho   = q(M1_INDEX) + q(M2_INDEX) + q(M1_D_INDEX);
+    const auto rho   = q(M1_INDEX) + q(M2_INDEX);
     const auto vel_d = q(RHO_U_INDEX + curr_d)/rho;
 
     // Multiply the state the velcoity along the direction of interest
     res(M1_INDEX) *= vel_d;
     res(M2_INDEX) *= vel_d;
-    res(M1_D_INDEX) *= vel_d;
-    res(ALPHA1_D_INDEX) *= vel_d;
-    res(SIGMA_D_INDEX) *= vel_d;
     res(RHO_ALPHA1_BAR_INDEX) *= vel_d;
     for(std::size_t d = 0; d < EquationData::dim; ++d) {
       res(RHO_U_INDEX + d) *= vel_d;
@@ -174,11 +165,11 @@ namespace samurai {
 
     // Compute and add the contribution due to the pressure
     const auto alpha1_bar = q(RHO_ALPHA1_BAR_INDEX)/rho;
-    const auto alpha1     = alpha1_bar*(1.0 - q(ALPHA1_D_INDEX));
+    const auto alpha1     = alpha1_bar;
     const auto rho1       = (alpha1 > eps) ? q(M1_INDEX)/alpha1 : nan("");
     const auto p1         = phase1.pres_value(rho1);
 
-    const auto alpha2     = 1.0 - alpha1 - q(ALPHA1_D_INDEX);
+    const auto alpha2     = 1.0 - alpha1;
     const auto rho2       = (alpha2 > eps) ? q(M2_INDEX)/alpha2 : nan("");
     const auto p2         = phase2.pres_value(rho2);
 
@@ -207,21 +198,19 @@ namespace samurai {
     }
 
     const auto rho = (*conserved_variables)(M1_INDEX)
-                   + (*conserved_variables)(M2_INDEX)
-                   + (*conserved_variables)(M1_D_INDEX);
+                   + (*conserved_variables)(M2_INDEX);
 
     // Update auxiliary values affected by the nonlinear function for which we seek a zero
-    const auto alpha1 = alpha1_bar*(1.0 - (*conserved_variables)(ALPHA1_D_INDEX));
+    const auto alpha1 = alpha1_bar;
     const auto rho1   = (alpha1 > eps) ? (*conserved_variables)(M1_INDEX)/alpha1 : nan("");
     const auto p1     = phase1.pres_value(rho1);
 
-    const auto alpha2 = 1.0 - alpha1 - (*conserved_variables)(ALPHA1_D_INDEX);
+    const auto alpha2 = 1.0 - alpha1;
     const auto rho2   = (alpha2 > eps) ? (*conserved_variables)(M2_INDEX)/alpha2 : nan("");
     const auto p2     = phase2.pres_value(rho2);
 
     // Compute the nonlinear function for which we seek the zero (basically the Laplace law)
-    const auto F = (1.0 - (*conserved_variables)(ALPHA1_D_INDEX))*(p1 - p2)
-                 - EquationData::sigma*H;
+    const auto F = p1 - p2 - EquationData::sigma*H;
 
     // Perform the relaxation only where really needed
     if(!std::isnan(F) && std::abs(F) > tol*std::min(EquationData::p0_phase1, EquationData::sigma*H) && std::abs(dalpha1_bar) > tol &&
@@ -293,31 +282,31 @@ namespace samurai {
                                                                                  const auto& grad_alpha1_barL,
                                                                                  const auto& grad_alpha1_barR) {
     // Compute the quantities needed for the maximum eigenvalue estimate for the left state
-    const auto rho_L        = qL(M1_INDEX) + qL(M2_INDEX) + qL(M1_D_INDEX);
+    const auto rho_L        = qL(M1_INDEX) + qL(M2_INDEX);
     const auto vel_d_L      = qL(RHO_U_INDEX + curr_d)/rho_L;
 
     const auto alpha1_bar_L = qL(RHO_ALPHA1_BAR_INDEX)/rho_L;
-    const auto alpha1_L     = alpha1_bar_L*(1.0 - qL(ALPHA1_D_INDEX));
+    const auto alpha1_L     = alpha1_bar_L;
     const auto rho1_L       = (alpha1_L > this->eps) ? qL(M1_INDEX)/alpha1_L : nan("");
-    const auto alpha2_L     = 1.0 - alpha1_L - qL(ALPHA1_D_INDEX);
+    const auto alpha2_L     = 1.0 - alpha1_L;
     const auto rho2_L       = (alpha2_L > this->eps) ? qL(M2_INDEX)/alpha2_L : nan("");
     const auto c_squared_L  = qL(M1_INDEX)*this->phase1.c_value(rho1_L)*this->phase1.c_value(rho1_L)
                             + qL(M2_INDEX)*this->phase2.c_value(rho2_L)*this->phase2.c_value(rho2_L);
-    const auto c_L          = std::sqrt(c_squared_L/rho_L)/(1.0 - qL(ALPHA1_D_INDEX));
+    const auto c_L          = std::sqrt(c_squared_L/rho_L);
     const auto r_L          = EquationData::sigma*std::sqrt(xt::sum(grad_alpha1_barL*grad_alpha1_barL)())/(rho_L*c_L*c_L);
 
     // Compute the quantities needed for the maximum eigenvalue estimate for the right state
-    const auto rho_R        = qR(M1_INDEX) + qR(M2_INDEX) + qR(M1_D_INDEX);
+    const auto rho_R        = qR(M1_INDEX) + qR(M2_INDEX);
     const auto vel_d_R      = qR(RHO_U_INDEX + curr_d)/rho_R;
 
     const auto alpha1_bar_R = qR(RHO_ALPHA1_BAR_INDEX)/rho_R;
-    const auto alpha1_R     = alpha1_bar_R*(1.0 - qR(ALPHA1_D_INDEX));
+    const auto alpha1_R     = alpha1_bar_R;
     const auto rho1_R       = (alpha1_R > this->eps) ? qR(M1_INDEX)/alpha1_R : nan("");
-    const auto alpha2_R     = 1.0 - alpha1_R - qR(ALPHA1_D_INDEX);
+    const auto alpha2_R     = 1.0 - alpha1_R;
     const auto rho2_R       = (alpha2_R > this->eps) ? qR(M2_INDEX)/alpha2_R : nan("");
     const auto c_squared_R  = qR(M1_INDEX)*this->phase1.c_value(rho1_R)*this->phase1.c_value(rho1_R)
                             + qR(M2_INDEX)*this->phase2.c_value(rho2_R)*this->phase2.c_value(rho2_R);
-    const auto c_R          = std::sqrt(c_squared_R/rho_R)/(1.0 - qR(ALPHA1_D_INDEX));
+    const auto c_R          = std::sqrt(c_squared_R/rho_R);
     const auto r_R          = EquationData::sigma*std::sqrt(xt::sum(grad_alpha1_barR*grad_alpha1_barR)())/(rho_R*c_R*c_R);
 
     // Compute the estimate of the eigenvalue considering also the surface tension contribution
@@ -383,8 +372,6 @@ namespace samurai {
     auto make_two_scale_capillarity(const auto& grad_alpha1_bar); // Compute the flux over all cells
 
   private:
-    void solve_alpha1_d_fan(const double rhs, double& alpha1_d); // Newton method to compute alpha1_d for the fan
-
     void solve_p_star(const auto& qL, const auto& qR,
                       const double dvel_d, const double vel_d_L,
                       const double p0_L, const double p0_R, double& p_star); // Newton method to compute p* in the exact solver for the hyperbolic part
@@ -397,51 +384,6 @@ namespace samurai {
                                   const BarotropicEOS<>& EOS_phase2,
                                   const double eps_,
                                   const double grad_alpha1_bar_min_): Flux<Field>(EOS_phase1, EOS_phase2, eps_, grad_alpha1_bar_min_) {}
-
-  // Compute small-scale volume fraction for the fan through Newton-Rapson method
-  //
-  template<class Field>
-  void GodunovFlux<Field>::solve_alpha1_d_fan(const double rhs, double& alpha1_d) {
-    const double tol            = 1e-12; /*--- Tolerance of the Newton method ---*/
-    const double lambda         = 0.9;   /*--- Parameter for bound preserving strategy ---*/
-    const std::size_t max_iters = 60;    /*--- Maximum number of Newton iterations ----*/
-
-    double dalpha1_d = std::numeric_limits<double>::infinity();
-
-    const double alpha1_d_0 = alpha1_d;
-    double F_alpha1_d       = 1.0/(1.0 - alpha1_d) + std::log((alpha1_d/alpha1_d_0)*((1.0 - alpha1_d_0)/(1.0 - alpha1_d)));
-
-    // Loop of Newton method
-    std::size_t Newton_iter = 0;
-    while(Newton_iter < max_iters && alpha1_d > this->eps && 1.0 - alpha1_d > this->eps &&
-          std::abs(F_alpha1_d - rhs) > tol*std::abs(rhs) && std::abs(dalpha1_d)/alpha1_d > tol) {
-      Newton_iter++;
-
-      // Unmodified Newton-Rapson increment
-      double dF_dalpha1_d = 1.0/((1.0 - alpha1_d)*(1.0 - alpha1_d)*alpha1_d);
-      dalpha1_d          = -(F_alpha1_d - rhs)/dF_dalpha1_d;
-
-      // Bound preserving increment
-      dalpha1_d = (dalpha1_d < 0.0) ? std::max(dalpha1_d, -lambda*alpha1_d) : std::min(dalpha1_d, lambda*(1.0 - alpha1_d));
-
-      if(alpha1_d + dalpha1_d < 0.0 || alpha1_d + dalpha1_d > 1.0) {
-        std::cerr << "Bounds exceeding value for small-scale volume fraction in the Newton method at fan" << std::endl;
-        exit(1);
-      }
-      else {
-        alpha1_d += dalpha1_d;
-      }
-
-      // Newton cycle diverged
-      if(Newton_iter == max_iters) {
-        std::cout << "Netwon method not converged to compute small-scale volume fraction in the fan" << std::endl;
-        exit(1);
-      }
-
-      // Update function for which we seek the zero
-      F_alpha1_d = 1.0/(1.0 - alpha1_d) + std::log((alpha1_d/alpha1_d_0)*((1.0 - alpha1_d_0)/(1.0 - alpha1_d)));
-    }
-  }
 
   // Compute p* through Newton-Rapson method
   //
@@ -456,30 +398,29 @@ namespace samurai {
     double dp_star = std::numeric_limits<double>::infinity();
 
     // Left state useful variables
-    const auto rho_L        = qL(M1_INDEX) + qL(M2_INDEX) + qL(M1_D_INDEX);
+    const auto rho_L        = qL(M1_INDEX) + qL(M2_INDEX);
     const auto alpha1_bar_L = qL(RHO_ALPHA1_BAR_INDEX)/rho_L;
-    const auto alpha1_L     = alpha1_bar_L*(1.0 - qL(ALPHA1_D_INDEX));
+    const auto alpha1_L     = alpha1_bar_L;
     const auto rho1_L       = (alpha1_L > this->eps) ? qL(M1_INDEX)/alpha1_L : nan("");
-    const auto alpha2_L     = 1.0 - alpha1_L - qL(ALPHA1_D_INDEX);
+    const auto alpha2_L     = 1.0 - alpha1_L;
     const auto rho2_L       = (alpha2_L > this->eps) ? qL(M2_INDEX)/alpha2_L : nan("");
     const auto c_squared_L  = qL(M1_INDEX)*this->phase1.c_value(rho1_L)*this->phase1.c_value(rho1_L)
                             + qL(M2_INDEX)*this->phase2.c_value(rho2_L)*this->phase2.c_value(rho2_L);
-    const auto c_L          = std::sqrt(c_squared_L/rho_L)/(1.0 - qL(ALPHA1_D_INDEX));
+    const auto c_L          = std::sqrt(c_squared_L/rho_L);
     const auto p_bar_L      = (alpha1_L > this->eps && alpha2_L > this->eps) ?
                               alpha1_bar_L*this->phase1.pres_value(rho1_L) + (1.0 - alpha1_bar_L)*this->phase2.pres_value(rho2_L) :
                               ((alpha1_L < this->eps) ? this->phase2.pres_value(rho2_L) : this->phase1.pres_value(rho1_L));
 
     // Right state useful variables
-    const auto rho_R        = qR(M1_INDEX) + qR(M2_INDEX) + qR(M1_D_INDEX);
+    const auto rho_R        = qR(M1_INDEX) + qR(M2_INDEX);
     const auto alpha1_bar_R = qR(RHO_ALPHA1_BAR_INDEX)/rho_R;
-    const auto alpha1_R     = alpha1_bar_R*(1.0 - qR(ALPHA1_D_INDEX));
+    const auto alpha1_R     = alpha1_bar_R;
     const auto rho1_R       = (alpha1_R > this->eps) ? qR(M1_INDEX)/alpha1_R : nan("");
-    const auto alpha2_R     = 1.0 - alpha1_R - qR(ALPHA1_D_INDEX);
+    const auto alpha2_R     = 1.0 - alpha1_R;
     const auto rho2_R       = (alpha2_R > this->eps) ? qR(M2_INDEX)/alpha2_R : nan("");
     const auto c_squared_R  = qR(M1_INDEX)*this->phase1.c_value(rho1_R)*this->phase1.c_value(rho1_R)
                             + qR(M2_INDEX)*this->phase2.c_value(rho2_R)*this->phase2.c_value(rho2_R);
-    const auto c_R          = std::sqrt(c_squared_R/rho_R)/(1.0 - qR(ALPHA1_D_INDEX));
-
+    const auto c_R          = std::sqrt(c_squared_R/rho_R);
     const auto p_bar_R      = (alpha1_R > this->eps && alpha2_R > this->eps) ?
                               alpha1_bar_R*this->phase1.pres_value(rho1_R) + (1.0 - alpha1_bar_R)*this->phase2.pres_value(rho2_R) :
                               ((alpha1_R < this->eps) ? this->phase2.pres_value(rho2_R) : this->phase1.pres_value(rho1_R));
@@ -491,19 +432,19 @@ namespace samurai {
 
     double F_p_star = dvel_d;
     if(p_star <= p_bar_L) {
-      F_p_star += c_L*(1.0 - qL(ALPHA1_D_INDEX))*std::log((p_bar_L - p0_L)/(p_star - p0_L));
+      F_p_star += c_L*std::log((p_bar_L - p0_L)/(p_star - p0_L));
     }
     else {
-      F_p_star -= std::sqrt(1.0 - qL(ALPHA1_D_INDEX))*(p_star - p_bar_L)/std::sqrt(rho_L*(p_star - p0_L));
+      F_p_star -= (p_star - p_bar_L)/std::sqrt(rho_L*(p_star - p0_L));
     }
     if(p_star <= p_bar_R) {
-      F_p_star += c_R*(1.0 - qR(ALPHA1_D_INDEX))*std::log((p_bar_R - p0_R)/(p_star - p0_R));
+      F_p_star += c_R*std::log((p_bar_R - p0_R)/(p_star - p0_R));
     }
     else {
-      F_p_star -= std::sqrt(1.0 - qR(ALPHA1_D_INDEX))*(p_star - p_bar_R)/std::sqrt(rho_R*(p_star - p0_R));
+      F_p_star -= (p_star - p_bar_R)/std::sqrt(rho_R*(p_star - p0_R));
     }
 
-    // Loop of Newton method
+    // Loop of Newton method to compute p*
     std::size_t Newton_iter = 0;
     while(Newton_iter < max_iters && std::abs(F_p_star) > tol*std::abs(vel_d_L) && std::abs(dp_star)/std::abs(p_star) > tol) {
       Newton_iter++;
@@ -511,32 +452,32 @@ namespace samurai {
       // Unmodified Newton-Rapson increment
       double dF_p_star;
       if(p_star <= p_bar_L) {
-        dF_p_star = c_L*(1.0 - qL(ALPHA1_D_INDEX))/(p0_L - p_star);
+        dF_p_star = c_L/(p0_L - p_star);
       }
       else {
-        dF_p_star = std::sqrt(1.0 - qL(ALPHA1_D_INDEX))*(2.0*p0_L - p_star - p_bar_L)/
+        dF_p_star = (2.0*p0_L - p_star - p_bar_L)/
                     (2.0*(p_star - p0_L)*std::sqrt(rho_L*(p_star - p0_L)));
       }
       if(p_star <= p_bar_R) {
-        dF_p_star += c_R*(1.0 - qR(ALPHA1_D_INDEX))/(p0_R - p_star);
+        dF_p_star += c_R/(p0_R - p_star);
       }
       else {
-        dF_p_star += std::sqrt(1.0 - qR(ALPHA1_D_INDEX))*(2.0*p0_R - p_star - p_bar_R)/
+        dF_p_star += (2.0*p0_R - p_star - p_bar_R)/
                      (2.0*(p_star - p0_R)*std::sqrt(rho_R*(p_star - p0_R)));
       }
       double ddF_p_star;
       if(p_star <= p_bar_L) {
-        ddF_p_star = c_L*(1.0 - qL(ALPHA1_D_INDEX))/((p0_L - p_star)*(p0_L - p_star));
+        ddF_p_star = c_L/((p0_L - p_star)*(p0_L - p_star));
       }
       else {
-        ddF_p_star = std::sqrt(1.0 - qL(ALPHA1_D_INDEX))*(-4.0*p0_L + p_star + 3.0*p_bar_L)/
+        ddF_p_star = (-4.0*p0_L + p_star + 3.0*p_bar_L)/
                      (4.0*(p_star - p0_L)*(p_star - p0_L)*std::sqrt(rho_L*(p_star - p0_L)));
       }
       if(p_star <= p_bar_R) {
-        ddF_p_star += c_R*(1.0 - qR(ALPHA1_D_INDEX))/((p0_R - p_star)*(p0_R - p_star));
+        ddF_p_star += c_R/((p0_R - p_star)*(p0_R - p_star));
       }
       else {
-        ddF_p_star += std::sqrt(1.0 - qR(ALPHA1_D_INDEX))*(-4.0*p0_R + p_star + 3.0*p_bar_R)/
+        ddF_p_star += (-4.0*p0_R + p_star + 3.0*p_bar_R)/
                       (4.0*(p_star - p0_R)*(p_star - p0_R)*std::sqrt(rho_R*(p_star - p0_R)));
       }
       dp_star = -2.0*F_p_star*dF_p_star/(2.0*dF_p_star*dF_p_star - F_p_star*ddF_p_star);
@@ -561,16 +502,16 @@ namespace samurai {
       // Update function for which we seek the zero
       F_p_star = dvel_d;
       if(p_star <= p_bar_L) {
-        F_p_star += c_L*(1.0 - qL(ALPHA1_D_INDEX))*std::log((p_bar_L - p0_L)/(p_star - p0_L));
+        F_p_star += c_L*std::log((p_bar_L - p0_L)/(p_star - p0_L));
       }
       else {
-        F_p_star -= std::sqrt(1.0 - qL(ALPHA1_D_INDEX))*(p_star - p_bar_L)/std::sqrt(rho_L*(p_star - p0_L));
+        F_p_star -= (p_star - p_bar_L)/std::sqrt(rho_L*(p_star - p0_L));
       }
       if(p_star <= p_bar_R) {
-        F_p_star += c_R*(1.0 - qR(ALPHA1_D_INDEX))*std::log((p_bar_R - p0_R)/(p_star - p0_R));
+        F_p_star += c_R*std::log((p_bar_R - p0_R)/(p_star - p0_R));
       }
       else {
-        F_p_star -= std::sqrt(1.0 - qR(ALPHA1_D_INDEX))*(p_star - p_bar_R)/std::sqrt(rho_R*(p_star - p0_R));
+        F_p_star -= (p_star - p_bar_R)/std::sqrt(rho_R*(p_star - p0_R));
       }
     }
   }
@@ -589,32 +530,32 @@ namespace samurai {
 
     if(is_discontinuous) {
       // Left state useful variables
-      const auto rho_L        = qL(M1_INDEX) + qL(M2_INDEX) + qL(M1_D_INDEX);
+      const auto rho_L        = qL(M1_INDEX) + qL(M2_INDEX);
       const auto vel_d_L      = qL(RHO_U_INDEX + curr_d)/rho_L;
       const auto alpha1_bar_L = qL(RHO_ALPHA1_BAR_INDEX)/rho_L;
-      const auto alpha1_L     = alpha1_bar_L*(1.0 - qL(ALPHA1_D_INDEX));
+      const auto alpha1_L     = alpha1_bar_L;
       const auto rho1_L       = (alpha1_L > this->eps) ? qL(M1_INDEX)/alpha1_L : nan("");
-      const auto alpha2_L     = 1.0 - alpha1_L - qL(ALPHA1_D_INDEX);
+      const auto alpha2_L     = 1.0 - alpha1_L;
       const auto rho2_L       = (alpha2_L > this->eps) ? qL(M2_INDEX)/alpha2_L : nan("");
       const auto c_squared_L  = qL(M1_INDEX)*this->phase1.c_value(rho1_L)*this->phase1.c_value(rho1_L)
                               + qL(M2_INDEX)*this->phase2.c_value(rho2_L)*this->phase2.c_value(rho2_L);
-      const auto c_L          = std::sqrt(c_squared_L/rho_L)/(1.0 - qL(ALPHA1_D_INDEX));
+      const auto c_L          = std::sqrt(c_squared_L/rho_L);
 
       const auto p0_L         = EquationData::p0_phase1
                               - alpha1_bar_L*EquationData::rho0_phase1*EquationData::c0_phase1*EquationData::c0_phase1
                               - (1.0 - alpha1_bar_L)*EquationData::rho0_phase2*EquationData::c0_phase2*EquationData::c0_phase2;
 
       // Right state useful variables
-      const auto rho_R        = qR(M1_INDEX) + qR(M2_INDEX) + qR(M1_D_INDEX);
+      const auto rho_R        = qR(M1_INDEX) + qR(M2_INDEX);
       const auto vel_d_R      = qR(RHO_U_INDEX + curr_d)/rho_R;
       const auto alpha1_bar_R = qR(RHO_ALPHA1_BAR_INDEX)/rho_R;
-      const auto alpha1_R     = alpha1_bar_R*(1.0 - qR(ALPHA1_D_INDEX));
+      const auto alpha1_R     = alpha1_bar_R;
       const auto rho1_R       = (alpha1_R > this->eps) ? qR(M1_INDEX)/alpha1_R : nan("");
-      const auto alpha2_R     = 1.0 - alpha1_R - qR(ALPHA1_D_INDEX);
+      const auto alpha2_R     = 1.0 - alpha1_R;
       const auto rho2_R       = (alpha2_R > this->eps) ? qR(M2_INDEX)/alpha2_R : nan("");
       const auto c_squared_R  = qR(M1_INDEX)*this->phase1.c_value(rho1_R)*this->phase1.c_value(rho1_R)
                               + qR(M2_INDEX)*this->phase2.c_value(rho2_R)*this->phase2.c_value(rho2_R);
-      const auto c_R          = std::sqrt(c_squared_R/rho_R)/(1.0 - qR(ALPHA1_D_INDEX));
+      const auto c_R          = std::sqrt(c_squared_R/rho_R);
 
       const auto p0_R         = EquationData::p0_phase1
                               - alpha1_bar_R*EquationData::rho0_phase1*EquationData::c0_phase1*EquationData::c0_phase1
@@ -632,22 +573,18 @@ namespace samurai {
       solve_p_star(qL, qR, vel_d_L - vel_d_R, vel_d_L, p0_L, p0_R, p_star);
 
       // Compute u*
-      const auto u_star = (p_star <= p_bar_L) ? vel_d_L + c_L*(1.0 - qL(ALPHA1_D_INDEX))*std::log((p_bar_L - p0_L)/(p_star - p0_L)) :
-                                                vel_d_L - std::sqrt(1.0 - qL(ALPHA1_D_INDEX))*(p_star - p_bar_L)/std::sqrt(rho_L*(p_star - p0_L));
+      const auto u_star = (p_star <= p_bar_L) ? vel_d_L + c_L*std::log((p_bar_L - p0_L)/(p_star - p0_L)) :
+                                                vel_d_L - (p_star - p_bar_L)/std::sqrt(rho_L*(p_star - p0_L));
 
       // Left "connecting state"
       if(u_star > 0.0) {
         // 1-wave left shock
         if(p_star > p_bar_L) {
-          const auto r = 1.0 + (1.0 - qL(ALPHA1_D_INDEX))/
-                               (qL(ALPHA1_D_INDEX) + (rho_L*c_L*c_L*(1.0 - qL(ALPHA1_D_INDEX)))/(p_star - p_bar_L));
+          const auto r = 1.0 + 1.0/((rho_L*c_L*c_L)/(p_star - p_bar_L));
 
-          const auto m1_L_star       = qL(M1_INDEX)*r;
-          const auto m2_L_star       = qL(M2_INDEX)*r;
-          const auto alpha1_d_L_star = qL(ALPHA1_D_INDEX)*r;
-          const auto m1_d_L_star     = (qL(ALPHA1_D_INDEX) > this->eps) ? alpha1_d_L_star*(qL(M1_D_INDEX)/qL(ALPHA1_D_INDEX)) : 0.0;
-          const auto Sigma_d_L_star  = (qL(ALPHA1_D_INDEX) > this->eps) ? alpha1_d_L_star*(qL(SIGMA_D_INDEX)/qL(ALPHA1_D_INDEX)) : 0.0;
-          const auto rho_L_star      = m1_L_star + m2_L_star + m1_d_L_star;
+          const auto m1_L_star  = qL(M1_INDEX)*r;
+          const auto m2_L_star  = qL(M2_INDEX)*r;
+          const auto rho_L_star = m1_L_star + m2_L_star;
 
           auto s_L = nan("");
           if(r > 1) {
@@ -662,9 +599,6 @@ namespace samurai {
           if(!std::isnan(s_L) && s_L < 0.0) {
             q_star(M1_INDEX)             = m1_L_star;
             q_star(M2_INDEX)             = m2_L_star;
-            q_star(M1_D_INDEX)           = m1_d_L_star;
-            q_star(ALPHA1_D_INDEX)       = alpha1_d_L_star;
-            q_star(SIGMA_D_INDEX)        = Sigma_d_L_star;
             q_star(RHO_ALPHA1_BAR_INDEX) = rho_L_star*alpha1_bar_L;
             if(curr_d == 0) {
               q_star(RHO_U_INDEX)     = rho_L_star*u_star;
@@ -680,54 +614,35 @@ namespace samurai {
         else {
           // Left of the left fan is qL, already assigned. Now we need to check if we are in
           // the left fan or at the right of the left fan
-          const auto alpha1_d_L_star = 1.0 - 1.0/(1.0 + qL(ALPHA1_D_INDEX)/(1.0 - qL(ALPHA1_D_INDEX))*
-                                                        std::exp((vel_d_L - u_star)/(c_L*(1.0 - qL(ALPHA1_D_INDEX)))));
-          const auto sH_L            = vel_d_L - c_L;
-          const auto sT_L            = u_star - c_L*(1.0 + qL(ALPHA1_D_INDEX)*std::exp((vel_d_L - u_star)/(c_L*(1.0 - qL(ALPHA1_D_INDEX)))));
+          const auto sH_L = vel_d_L - c_L;
+          const auto sT_L = u_star - c_L;
 
           // Compute state in the left fan
           if(sH_L < 0.0 && sT_L > 0.0) {
-            auto alpha1_d_L_fan = qL(ALPHA1_D_INDEX);
-            solve_alpha1_d_fan(vel_d_L/(c_L*(1.0 - qL(ALPHA1_D_INDEX))), alpha1_d_L_fan);
-
-            const auto m1_L_fan      = (1.0 - alpha1_d_L_fan)*(qL(M1_INDEX)/(1.0 - qL(ALPHA1_D_INDEX)))*
-                                       std::exp((vel_d_L - c_L*(1.0 - qL(ALPHA1_D_INDEX))/(1.0 - alpha1_d_L_fan))/(c_L*(1.0 - qL(ALPHA1_D_INDEX))));
-            const auto m2_L_fan      = (1.0 - alpha1_d_L_fan)*(qL(M2_INDEX)/(1.0 - qL(ALPHA1_D_INDEX)))*
-                                       std::exp((vel_d_L - c_L*(1.0 - qL(ALPHA1_D_INDEX))/(1.0 - alpha1_d_L_fan))/(c_L*(1.0 - qL(ALPHA1_D_INDEX))));
-            const auto m1_d_L_fan    = (qL(ALPHA1_D_INDEX) > this->eps) ? alpha1_d_L_fan*(qL(M1_D_INDEX)/qL(ALPHA1_D_INDEX)) : 0.0;
-            const auto Sigma_d_L_fan = (qL(ALPHA1_D_INDEX) > this->eps) ? alpha1_d_L_fan*(qL(SIGMA_D_INDEX)/qL(ALPHA1_D_INDEX)) : 0.0;
-            const auto rho_L_fan     = m1_L_fan + m2_L_fan + m1_d_L_fan;
+            const auto m1_L_fan  = qL(M1_INDEX)*std::exp((vel_d_L - c_L)/c_L);
+            const auto m2_L_fan  = qL(M2_INDEX)*std::exp((vel_d_L - c_L)/c_L);
+            const auto rho_L_fan = m1_L_fan + m2_L_fan;
 
             q_star(M1_INDEX)             = m1_L_fan;
             q_star(M2_INDEX)             = m2_L_fan;
-            q_star(M1_D_INDEX)           = m1_d_L_fan;
-            q_star(ALPHA1_D_INDEX)       = alpha1_d_L_fan;
-            q_star(SIGMA_D_INDEX)        = Sigma_d_L_fan;
             q_star(RHO_ALPHA1_BAR_INDEX) = rho_L_fan*alpha1_bar_L;
             if(curr_d == 0) {
-              q_star(RHO_U_INDEX)     = rho_L_fan*(c_L*(1.0 - qL(ALPHA1_D_INDEX))/(1.0 - alpha1_d_L_fan)); //TODO: Check this sign of the velocity
+              q_star(RHO_U_INDEX)     = rho_L_fan*c_L; //TODO: Check this sign of the velocity
               q_star(RHO_U_INDEX + 1) = rho_L_fan*(qL(RHO_U_INDEX + 1)/rho_L);
             }
             else if(curr_d == 1) {
               q_star(RHO_U_INDEX)     = rho_L_fan*(qL(RHO_U_INDEX)/rho_L);
-              q_star(RHO_U_INDEX + 1) = rho_L_fan*(c_L*(1.0 - qL(ALPHA1_D_INDEX))/(1.0 - alpha1_d_L_fan));
+              q_star(RHO_U_INDEX + 1) = rho_L_fan*c_L;
             }
           }
           // Right of the left fan. Compute the state
           else if(sH_L < 0.0 && sT_L <= 0.0) {
-            const auto m1_L_star      = (1.0 - alpha1_d_L_star)*(qL(M1_INDEX)/(1.0 - qL(ALPHA1_D_INDEX)))*
-                                        std::exp((vel_d_L - u_star)/(c_L*(1.0 - qL(ALPHA1_D_INDEX))));
-            const auto m2_L_star      = (1.0 - alpha1_d_L_star)*(qL(M2_INDEX)/(1.0 - qL(ALPHA1_D_INDEX)))*
-                                        std::exp((vel_d_L - u_star)/(c_L*(1.0 - qL(ALPHA1_D_INDEX))));
-            const auto m1_d_L_star    = (qL(ALPHA1_D_INDEX) > this->eps) ? alpha1_d_L_star*(qL(M1_D_INDEX)/qL(ALPHA1_D_INDEX)) : 0.0;
-            const auto Sigma_d_L_star = (qL(ALPHA1_D_INDEX) > this->eps) ? alpha1_d_L_star*(qL(SIGMA_D_INDEX)/qL(ALPHA1_D_INDEX)) : 0.0;
-            const auto rho_L_star     = m1_L_star + m2_L_star + m1_d_L_star;
+            const auto m1_L_star  = qL(M1_INDEX)*std::exp((vel_d_L - u_star)/c_L);
+            const auto m2_L_star  = qL(M2_INDEX)*std::exp((vel_d_L - u_star)/c_L);
+            const auto rho_L_star = m1_L_star + m2_L_star;
 
             q_star(M1_INDEX)             = m1_L_star;
             q_star(M2_INDEX)             = m2_L_star;
-            q_star(M1_D_INDEX)           = m1_d_L_star;
-            q_star(ALPHA1_D_INDEX)       = alpha1_d_L_star;
-            q_star(SIGMA_D_INDEX)        = Sigma_d_L_star;
             q_star(RHO_ALPHA1_BAR_INDEX) = rho_L_star*alpha1_bar_L;
             if(curr_d == 0) {
               q_star(RHO_U_INDEX)     = rho_L_star*u_star;
@@ -744,15 +659,11 @@ namespace samurai {
       else {
         // 1-wave right shock
         if(p_star > p_bar_R) {
-          const auto r = 1.0 + (1.0 - qR(ALPHA1_D_INDEX))/
-                               (qR(ALPHA1_D_INDEX) + (rho_R*c_R*c_R*(1.0 - qR(ALPHA1_D_INDEX)))/(p_star - p_bar_R));
+          const auto r = 1.0 + 1.0/((rho_R*c_R*c_R)/(p_star - p_bar_R));
 
-          const auto m1_R_star       = qR(M1_INDEX)*r;
-          const auto m2_R_star       = qR(M2_INDEX)*r;
-          const auto alpha1_d_R_star = qR(ALPHA1_D_INDEX)*r;
-          const auto m1_d_R_star     = (qR(ALPHA1_D_INDEX) > this->eps) ? alpha1_d_R_star*(qR(M1_D_INDEX)/qR(ALPHA1_D_INDEX)) : 0.0;
-          const auto Sigma_d_R_star  = (qR(ALPHA1_D_INDEX) > this->eps) ? alpha1_d_R_star*(qR(SIGMA_D_INDEX)/qR(ALPHA1_D_INDEX)) : 0.0;
-          const auto rho_R_star      = m1_R_star + m2_R_star + m1_d_R_star;
+          const auto m1_R_star  = qR(M1_INDEX)*r;
+          const auto m2_R_star  = qR(M2_INDEX)*r;
+          const auto rho_R_star = m1_R_star + m2_R_star;
 
           auto s_R = nan("");
           if(r > 1) {
@@ -770,9 +681,6 @@ namespace samurai {
           else {
             q_star(M1_INDEX)             = m1_R_star;
             q_star(M2_INDEX)             = m2_R_star;
-            q_star(M1_D_INDEX)           = m1_d_R_star;
-            q_star(ALPHA1_D_INDEX)       = alpha1_d_R_star;
-            q_star(SIGMA_D_INDEX)        = Sigma_d_R_star;
             q_star(RHO_ALPHA1_BAR_INDEX) = rho_R_star*alpha1_bar_R;
             if(curr_d == 0) {
               q_star(RHO_U_INDEX)     = rho_R_star*u_star;
@@ -786,14 +694,10 @@ namespace samurai {
         }
         // 3-waves right fan
         else {
-          auto alpha1_d_R_star = 1.0;
-          const auto sH_R      = vel_d_R + c_R;
-          auto sT_R            = std::numeric_limits<double>::infinity();
-          if(-(vel_d_R - u_star)/(c_R*(1.0 - qR(ALPHA1_D_INDEX))) < 100.0) {
-            alpha1_d_R_star = 1.0 - 1.0/(1.0 + qR(ALPHA1_D_INDEX)/(1.0 - qR(ALPHA1_D_INDEX))*
-                                                          std::exp(-(vel_d_R - u_star)/(c_R*(1.0 - qR(ALPHA1_D_INDEX)))));
-            sT_R            = u_star + c_R*(1.0 + qR(ALPHA1_D_INDEX)*std::exp((vel_d_R - u_star)/(c_R*(1.0 - qR(ALPHA1_D_INDEX)))));
-                                                                              // TODO: Check this sign of vel_d_R - u_star
+          const auto sH_R = vel_d_R + c_R;
+          auto sT_R       = std::numeric_limits<double>::infinity();
+          if(-(vel_d_R - u_star)/c_R < 100.0) {
+            sT_R = u_star + c_R; // TODO: Check this sign of vel_d_R - u_star
           }
 
           // Right of right fan is qR
@@ -802,47 +706,30 @@ namespace samurai {
           }
           // Compute the state in the right fan
           else if(sH_R >= 0.0 && sT_R < 0.0) {
-            auto alpha1_d_R_fan = qR(ALPHA1_D_INDEX);
-            solve_alpha1_d_fan(-vel_d_R/(c_R*(1.0 - qL(ALPHA1_D_INDEX))), alpha1_d_R_fan);
-
-            const auto m1_R_fan      = (1.0 - alpha1_d_R_fan)*(qR(M1_INDEX)/(1.0 - qR(ALPHA1_D_INDEX)))*
-                                       std::exp(-(vel_d_R + c_R*(1.0 - qR(ALPHA1_D_INDEX))/(1.0 - alpha1_d_R_fan))/(c_R*(1.0 - qR(ALPHA1_D_INDEX))));
-            const auto m2_R_fan      = (1.0 - alpha1_d_R_fan)*(qR(M2_INDEX)/(1.0 - qR(ALPHA1_D_INDEX)))*
-                                       std::exp(-(vel_d_R + c_R*(1.0 - qR(ALPHA1_D_INDEX))/(1.0 - alpha1_d_R_fan))/(c_R*(1.0 - qR(ALPHA1_D_INDEX))));
-            const auto m1_d_R_fan    = (qR(ALPHA1_D_INDEX) > this->eps) ? alpha1_d_R_fan*(qR(M1_D_INDEX)/qR(ALPHA1_D_INDEX)) : 0.0;
-            const auto Sigma_d_R_fan = (qR(ALPHA1_D_INDEX) > this->eps) ? alpha1_d_R_fan*(qR(SIGMA_D_INDEX)/qR(ALPHA1_D_INDEX)) : 0.0;
-            const auto rho_R_fan     = m1_R_fan + m2_R_fan + m1_d_R_fan;
+            const auto m1_R_fan  = qR(M1_INDEX)*std::exp(-(vel_d_R + c_R)/c_R);
+            const auto m2_R_fan  = qR(M2_INDEX)*std::exp(-(vel_d_R + c_R)/c_R);
+            const auto rho_R_fan = m1_R_fan + m2_R_fan;
 
             q_star(M1_INDEX)             = m1_R_fan;
             q_star(M2_INDEX)             = m2_R_fan;
-            q_star(M1_D_INDEX)           = m1_d_R_fan;
-            q_star(ALPHA1_D_INDEX)       = alpha1_d_R_fan;
-            q_star(SIGMA_D_INDEX)        = Sigma_d_R_fan;
             q_star(RHO_ALPHA1_BAR_INDEX) = rho_R_fan*alpha1_bar_R;
             if(curr_d == 0) {
-              q_star(RHO_U_INDEX)     = rho_R_fan*(-c_R*(1.0 - qR(ALPHA1_D_INDEX))/(1.0 - alpha1_d_R_fan)); // TODO: Check this sign of the velocity
+              q_star(RHO_U_INDEX)     = -rho_R_fan*c_R; // TODO: Check this sign of the velocity
               q_star(RHO_U_INDEX + 1) = rho_R_fan*(qR(RHO_U_INDEX + 1)/rho_R);
             }
             else if(curr_d == 1) {
               q_star(RHO_U_INDEX)     = rho_R_fan*(qR(RHO_U_INDEX)/rho_R);
-              q_star(RHO_U_INDEX + 1) = rho_R_fan*(-c_R*(1.0 - qR(ALPHA1_D_INDEX))/(1.0 - alpha1_d_R_fan));
+              q_star(RHO_U_INDEX + 1) = -rho_R_fan*c_R;
             }
           }
           // Compute state at the left of the right fan
           else {
-            const auto m1_R_star      = (1.0 - alpha1_d_R_star)*(qR(M1_INDEX)/(1.0 - qR(ALPHA1_D_INDEX)))*
-                                        std::exp(-(vel_d_R - u_star)/(c_R*(1.0 - qR(ALPHA1_D_INDEX))));
-            const auto m2_R_star      = (1.0 - alpha1_d_R_star)*(qR(M2_INDEX)/(1.0 - qR(ALPHA1_D_INDEX)))*
-                                        std::exp(-(vel_d_R - u_star)/(c_R*(1.0 - qR(ALPHA1_D_INDEX))));
-            const auto m1_d_R_star    = (qR(ALPHA1_D_INDEX) > this->eps) ? alpha1_d_R_star*(qR(M1_D_INDEX)/qR(ALPHA1_D_INDEX)) : 0.0;
-            const auto Sigma_d_R_star = (qR(ALPHA1_D_INDEX) > this->eps) ? alpha1_d_R_star*(qR(SIGMA_D_INDEX)/qR(ALPHA1_D_INDEX)) : 0.0;
-            const auto rho_R_star     = m1_R_star + m2_R_star + m1_d_R_star;
+            const auto m1_R_star  = qR(M1_INDEX)*std::exp(-(vel_d_R - u_star)/c_R);
+            const auto m2_R_star  = qR(M2_INDEX)*std::exp(-(vel_d_R - u_star)/c_R);
+            const auto rho_R_star = m1_R_star + m2_R_star ;
 
             q_star(M1_INDEX)             = m1_R_star;
             q_star(M2_INDEX)             = m2_R_star;
-            q_star(M1_D_INDEX)           = m1_d_R_star;
-            q_star(ALPHA1_D_INDEX)       = alpha1_d_R_star;
-            q_star(SIGMA_D_INDEX)        = Sigma_d_R_star;
             q_star(RHO_ALPHA1_BAR_INDEX) = rho_R_star*alpha1_bar_R;
             if(curr_d == 0) {
               q_star(RHO_U_INDEX)     = rho_R_star*u_star;

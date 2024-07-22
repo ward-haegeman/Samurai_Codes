@@ -233,11 +233,6 @@ void TwoScaleCapillarity<dim>::init_variables() {
   samurai::for_each_cell(mesh,
                          [&](const auto& cell)
                          {
-                           // Set small-scale variables
-                           conserved_variables[cell][ALPHA1_D_INDEX] = 0.0;
-                           conserved_variables[cell][SIGMA_D_INDEX]  = 0.0;
-                           conserved_variables[cell][M1_D_INDEX]     = conserved_variables[cell][ALPHA1_D_INDEX]*EOS_phase1.get_rho0();
-
                            // Recompute geometric locations to set partial masses
                            const auto center = cell.center();
                            const double x    = center[0];
@@ -262,7 +257,7 @@ void TwoScaleCapillarity<dim>::init_variables() {
                            const auto rho1 = EOS_phase1.rho_value(p1);
 
                            conserved_variables[cell][M1_INDEX] = (!std::isnan(rho1)) ?
-                                                                 alpha1_bar[cell]*(1.0 - conserved_variables[cell][ALPHA1_D_INDEX])*rho1 :
+                                                                 alpha1_bar[cell]*rho1 :
                                                                  0.0;
 
                            // Set mass phase 2
@@ -270,13 +265,12 @@ void TwoScaleCapillarity<dim>::init_variables() {
                            const auto rho2 = EOS_phase2.rho_value(p2);
 
                            conserved_variables[cell][M2_INDEX] = (!std::isnan(rho2)) ?
-                                                                 (1.0 - alpha1_bar[cell])*(1.0 - conserved_variables[cell][ALPHA1_D_INDEX])*rho2 :
+                                                                 (1.0 - alpha1_bar[cell])*rho2 :
                                                                  0.0;
 
                            // Set conserved variable associated to large-scale volume fraction
                            const auto rho = conserved_variables[cell][M1_INDEX]
-                                          + conserved_variables[cell][M2_INDEX]
-                                          + conserved_variables[cell][M1_D_INDEX];
+                                          + conserved_variables[cell][M2_INDEX];
 
                            conserved_variables[cell][RHO_ALPHA1_BAR_INDEX] = rho*alpha1_bar[cell];
 
@@ -288,8 +282,8 @@ void TwoScaleCapillarity<dim>::init_variables() {
   // Apply bcs
   const samurai::DirectionVector<dim> left  = {-1, 0};
   const samurai::DirectionVector<dim> right = {1, 0};
-  samurai::make_bc<samurai::Dirichlet<1>>(conserved_variables, 0.0, 1.0*EOS_phase2.get_rho0(), 0.0, 0.0, 0.0, 0.0, EOS_phase2.get_rho0()*U_0, 0.0)->on(left);
-  samurai::make_bc<samurai::Neumann<1>>(conserved_variables, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)->on(right);
+  samurai::make_bc<samurai::Dirichlet<1>>(conserved_variables, 0.0, 1.0*EOS_phase2.get_rho0(), 0.0, EOS_phase2.get_rho0()*U_0, 0.0)->on(left);
+  samurai::make_bc<samurai::Neumann<1>>(conserved_variables, 0.0, 0.0, 0.0, 0.0, 0.0)->on(right);
 }
 
 
@@ -304,19 +298,18 @@ double TwoScaleCapillarity<dim>::get_max_lambda() const {
                          {
                            // Compute the velocity along both horizontal and vertical direction
                            const auto rho   = conserved_variables[cell][M1_INDEX]
-                                            + conserved_variables[cell][M2_INDEX]
-                                            + conserved_variables[cell][M1_D_INDEX];
+                                            + conserved_variables[cell][M2_INDEX];
                            const auto vel_x = conserved_variables[cell][RHO_U_INDEX]/rho;
                            const auto vel_y = conserved_variables[cell][RHO_U_INDEX + 1]/rho;
 
                            // Compute frozen speed of sound
-                           const auto alpha1    = alpha1_bar[cell]*(1.0 - conserved_variables[cell][ALPHA1_D_INDEX]);
+                           const auto alpha1    = alpha1_bar[cell];
                            const auto rho1      = (alpha1 > eps) ? conserved_variables[cell][M1_INDEX]/alpha1 : nan("");
-                           const auto alpha2    = 1.0 - alpha1 - conserved_variables[cell][ALPHA1_D_INDEX];
+                           const auto alpha2    = 1.0 - alpha1;
                            const auto rho2      = (alpha2 > eps) ? conserved_variables[cell][M2_INDEX]/alpha2 : nan("");
                            const auto c_squared = conserved_variables[cell][M1_INDEX]*EOS_phase1.c_value(rho1)*EOS_phase1.c_value(rho1)
                                                 + conserved_variables[cell][M2_INDEX]*EOS_phase2.c_value(rho2)*EOS_phase2.c_value(rho2);
-                           const auto c         = std::sqrt(c_squared/rho)/(1.0 - conserved_variables[cell][ALPHA1_D_INDEX]);
+                           const auto c         = std::sqrt(c_squared/rho);
 
                            // Add term due to surface tension
                            const double r = EquationData::sigma*std::sqrt(xt::sum(grad_alpha1_bar[cell]*grad_alpha1_bar[cell])())/(rho*c*c);
@@ -473,42 +466,10 @@ void TwoScaleCapillarity<dim>::run() {
                                }
                                conserved_variables[cell][M2_INDEX] = 0.0;
                              }
-                             // Sanity check for m1_d
-                             if(conserved_variables[cell][M1_D_INDEX] < 0.0) {
-                               if(conserved_variables[cell][M1_D_INDEX] < -1e-14) {
-                                 std::cerr << "Negative small-scale mass after mesh adaptation" << std::endl;
-                                 save(fs::current_path(), "two_scale_capillarity_no_mass_transfer", "_diverged", conserved_variables);
-                                 exit(1);
-                               }
-                               conserved_variables[cell][M1_D_INDEX] = 0.0;
-                             }
-                             // Sanity check for alpha1_d
-                             if(conserved_variables[cell][ALPHA1_D_INDEX] > 1.0) {
-                               std::cerr << "Exceding value for small-scale volume fraction after mesh adaptation" << std::endl;
-                               save(fs::current_path(), "two_scale_capillarity_no_mass_transfer", "_diverged", conserved_variables);
-                               exit(1);
-                             }
-                             if(conserved_variables[cell][ALPHA1_D_INDEX] < 0.0) {
-                               if(conserved_variables[cell][ALPHA1_D_INDEX] < -1e-14) {
-                                 std::cerr << "Negative small-scale volume fraction after mesh adaptation" << std::endl;
-                                 save(fs::current_path(), "two_scale_capillarity_no_mass_transfer", "_diverged", conserved_variables);
-                                 exit(1);
-                               }
-                               conserved_variables[cell][ALPHA1_D_INDEX] = 0.0;
-                             }
-                             // Sanity check for Sigma_d
-                             if(conserved_variables[cell][SIGMA_D_INDEX] < 0.0) {
-                               if(conserved_variables[cell][SIGMA_D_INDEX] < -1e-14) {
-                                 std::cerr << "Negative small-scale interfacial area after mesh adaptation" << std::endl;
-                                 save(fs::current_path(), "two_scale_capillarity_no_mass_transfer", "_diverged", conserved_variables);
-                                 exit(1);
-                               }
-                               conserved_variables[cell][SIGMA_D_INDEX] = 0.0;
-                             }
+
 
                              const auto rho = conserved_variables[cell][M1_INDEX]
-                                            + conserved_variables[cell][M2_INDEX]
-                                            + conserved_variables[cell][M1_D_INDEX];
+                                            + conserved_variables[cell][M2_INDEX];
 
                              alpha1_bar[cell] = std::min(std::max(0.0, conserved_variables[cell][RHO_ALPHA1_BAR_INDEX]/rho), 1.0);
                            });
@@ -559,42 +520,9 @@ void TwoScaleCapillarity<dim>::run() {
                                }
                                conserved_variables[cell][M2_INDEX] = 0.0;
                              }
-                             // Sanity check for m1_d
-                             if(conserved_variables[cell][M1_D_INDEX] < 0.0) {
-                               if(conserved_variables[cell][M1_D_INDEX] < -1e-14) {
-                                 std::cerr << "Negative small-scale mass for phase 1 at the beginning of the relaxation" << std::endl;
-                                 save(fs::current_path(), "two_scale_capillarity_no_mass_transfer", "_diverged", conserved_variables);
-                                 exit(1);
-                               }
-                               conserved_variables[cell][M1_D_INDEX] = 0.0;
-                             }
-                             // Sanity check for alpha1_d
-                             if(conserved_variables[cell][ALPHA1_D_INDEX] > 1.0) {
-                               std::cerr << "Exceding value for small-scale volume fraction at the beginning of the relaxation" << std::endl;
-                               save(fs::current_path(), "two_scale_capillarity_no_mass_transfer", "_diverged", conserved_variables);
-                               exit(1);
-                             }
-                             if(conserved_variables[cell][ALPHA1_D_INDEX] < 0.0) {
-                               if(conserved_variables[cell][ALPHA1_D_INDEX] < -1e-14) {
-                                 std::cerr << "Negative small-scale volume fraction at the beginning of the relaxation" << std::endl;
-                                 save(fs::current_path(), "two_scale_capillarity_no_mass_transfer", "_diverged", conserved_variables);
-                                 exit(1);
-                               }
-                               conserved_variables[cell][ALPHA1_D_INDEX] = 0.0;
-                             }
-                             // Sanity check for Sigma_d
-                             if(conserved_variables[cell][SIGMA_D_INDEX] < 0.0) {
-                               if(conserved_variables[cell][SIGMA_D_INDEX] < -1e-14) {
-                                 std::cerr << "Negative small-scale interfacial area at the beginning of the relaxation" << std::endl;
-                                 save(fs::current_path(), "two_scale_capillarity_no_mass_transfer", "_diverged", conserved_variables);
-                                 exit(1);
-                               }
-                               conserved_variables[cell][SIGMA_D_INDEX] = 0.0;
-                             }
 
                              const auto rho = conserved_variables[cell][M1_INDEX]
-                                            + conserved_variables[cell][M2_INDEX]
-                                            + conserved_variables[cell][M1_D_INDEX];
+                                            + conserved_variables[cell][M2_INDEX];
 
                              alpha1_bar[cell] = std::min(std::max(0.0, conserved_variables[cell][RHO_ALPHA1_BAR_INDEX]/rho), 1.0);
                            });
