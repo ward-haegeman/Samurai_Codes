@@ -14,8 +14,8 @@ namespace fs = std::filesystem;
 
 #include "flux_6eqs.hpp"
 
-#define HLLC_FLUX
-//#define HLLC_BR_FLUX
+//#define HLLC_FLUX
+#define HLLC_BR_FLUX
 //#define RUSANOV_FLUX
 
 // Specify the use of this namespace where we just store the indices
@@ -119,6 +119,8 @@ private:
   void update_pressure_before_relaxation(); // Update pressure fields before relaxation
 
   void apply_instantaneous_pressure_relaxation(); // Apply an instantaneous pressure relaxation
+
+  void apply_instantaneous_pressure_relaxation_Saurel();
 };
 
 // Implement class constructor
@@ -318,7 +320,7 @@ void Relaxation<dim>::update_pressure_before_relaxation() {
 // Apply the instantaneous relaxation for the pressure
 //
 template<std::size_t dim>
-void Relaxation<dim>::apply_instantaneous_pressure_relaxation() {
+void Relaxation<dim>::apply_instantaneous_pressure_relaxation_Saurel() {
   samurai::for_each_cell(mesh,
                          [&](const auto& cell)
                          {
@@ -428,6 +430,126 @@ void Relaxation<dim>::apply_instantaneous_pressure_relaxation() {
                            }
                          });
 }
+
+
+
+
+template<std::size_t dim>
+void Relaxation<dim>::apply_instantaneous_pressure_relaxation() {
+  samurai::for_each_cell(mesh,
+                         [&](const auto& cell)
+                         {
+                            /*--- Save some quantities which remain constant during relaxation ---*/
+                            const auto rhoE_0 = conserved_variables[cell][ALPHA1_RHO1_E1_INDEX]
+                                             + conserved_variables[cell][ALPHA2_RHO2_E2_INDEX];
+                            
+                            const auto arho1_0 = conserved_variables[cell][ALPHA1_RHO1_INDEX];
+                            const auto arho2_0 = conserved_variables[cell][ALPHA2_RHO2_INDEX];
+
+                            const auto rho_0 = arho1_0 + arho2_0;
+                            
+                            auto vel_squared = 0.0;
+                            for(std::size_t d = 0; d < EquationData::dim; ++d) {
+                              const auto vel_d = conserved_variables[cell][RHO_U_INDEX + d]/rho_0;
+                              vel_squared += vel_d*vel_d;
+                            }
+
+                            const auto e_0 = rhoE_0 / rho_0 - 0.5*vel_squared;
+                            
+                            const auto Y1_0 = arho1_0 / rho_0;
+                            const auto Y2_0 = 1.0 - Y1_0;
+
+                            const auto gammaM1_1 = EquationData::gamma_1 - 1.0;
+                            const auto gammaM1_2 = EquationData::gamma_2 - 1.0;
+
+                            const auto gampinf_1 = EquationData::gamma_1 * EquationData::pi_infty_1;
+                            const auto gampinf_2 = EquationData::gamma_2 * EquationData::pi_infty_2;
+
+                            
+
+                            /*---  ----*/
+                            auto alpha_1 = conserved_variables[cell][ALPHA1_INDEX];
+                            auto alpha_2 = 1.0 - alpha_1;
+                            
+                            auto rho_1 = arho1_0 / alpha_1;
+                            auto rho_2 = arho2_0 / alpha_2;
+
+                            auto p_1 = p1[cell];
+                            auto p_2 = p2[cell];
+
+                            auto e_1 = EOS_phase1.e_value(rho_1, p_1);
+                            auto e_2 = EOS_phase2.e_value(rho_2, p_2);
+
+                            /*--- for the moment p_I = p_1 ---*/
+                            auto &p_I = p_1;
+                            const auto Laplace_cst_1 = (p_1 + EquationData::pi_infty_1)/std::pow(rho_1,EquationData::gamma_1);
+                            const auto Laplace_cst_2 = (p_2 + EquationData::pi_infty_2)/std::pow(rho_2,EquationData::gamma_2);
+
+                            auto dalpha = 0.0;
+
+                            /*
+                            auto dp1de1 = 0.0;
+                            auto dp2de2  = 0.0;
+
+                            auto dp1drho1 = 0.0;
+                            auto dp2drho2  = 0.0;
+                            */
+
+                            int nite = 0;
+                            auto alpha_max = 1.0;
+                            auto alpha_min = 0.0;
+
+                            while (nite < 100 && 2.0*(alpha_max-alpha_min)/(alpha_max+alpha_min)>1e-8) {
+                              /*
+                              dp1de1 = gammaM1_1 * rho_1;
+                              dp2de2 = gammaM1_2 * rho_2;
+                              dp1drho1 = gammaM1_1 * e_1;
+                              dp1drho1 = gammaM1_2 * e_2;
+                              
+                              dalpha = (p_1 - p_2) /
+                                       (  arho1_0*dp1drho1/(alpha_1*alpha_1) + p_I*dp1de1/arho1_0
+                                        + arho2_0*dp2drho2/(alpha_2*alpha_2) + p_I*dp2de2/arho2_0 );
+                              */
+
+                              p_1>p_2 ? alpha_min=alpha_1 : alpha_max=alpha_1;
+                              
+                              dalpha = (p_1 - p_2) /
+                                       std::abs( (p_1 + gammaM1_1*p_I + gampinf_1)/alpha_1
+                                        +(p_2 + gammaM1_2*p_I + gampinf_2)/alpha_2 );
+
+                              dalpha = std::min(dalpha, 0.9*(alpha_max-alpha_1));
+                              dalpha = std::max(dalpha, 0.9*(alpha_min-alpha_1));
+                              alpha_1 += dalpha;
+                              alpha_2 -= dalpha;
+
+                              rho_1 = arho1_0 / alpha_1;
+                              rho_2 = arho2_0 / alpha_2;
+
+                              
+                              p_1 = std::pow(rho_1,EquationData::gamma_1)*Laplace_cst_1 - EquationData::pi_infty_1;
+                              e_1 = EOS_phase1.e_value(rho_1, p_1);
+                              e_2 = (e_0 - Y1_0*e_1)/Y2_0;
+                              p_2 = EOS_phase2.pres_value(rho_2, e_2);
+                              /*
+                              p_2 = std::pow(rho_2,EquationData::gamma_2)*Laplace_cst_2 - EquationData::pi_infty_2;
+                              e_2 = EOS_phase2.e_value(rho_2, p_2);
+                              e_1 = (e_0 - Y2_0*e_2)/Y1_0;
+                              p_1 = EOS_phase1.pres_value(rho_1, e_1);
+                              */
+                              
+                              nite += 1;
+                            }
+                            
+                            /*--- Update the conserved variables : Alpha, AlphaRhoE_1, AlphaRhoE_2 ---*/
+                            conserved_variables[cell][ALPHA1_INDEX] = alpha_1;
+                            conserved_variables[cell][ALPHA1_RHO1_E1_INDEX] = arho1_0*(e_1 + 0.5*vel_squared);
+                            conserved_variables[cell][ALPHA2_RHO2_E2_INDEX] = rhoE_0 - conserved_variables[cell][ALPHA1_RHO1_E1_INDEX];
+                          });
+}
+
+
+
+
 
 // Compute the estimate of the maximum eigenvalue for CFL condition
 //
@@ -589,7 +711,7 @@ void Relaxation<dim>::run() {
       update_pressure_before_relaxation();
       apply_instantaneous_pressure_relaxation();
     }
-
+    /*
     // Apply the numerical scheme (second stage)
     samurai::update_ghost_mr(conserved_variables);
     samurai::update_bc(conserved_variables);
@@ -613,7 +735,7 @@ void Relaxation<dim>::run() {
       update_pressure_before_relaxation();
       apply_instantaneous_pressure_relaxation();
     }
-
+    */
     // Compute updated time step
     update_auxiliary_fields();
     dt = std::min(Tf - t, cfl*dx/get_max_lambda());

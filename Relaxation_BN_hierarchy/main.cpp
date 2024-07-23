@@ -20,8 +20,8 @@ int main(int argc, char* argv[]) {
   /*--- Mesh parameters ---*/
   xt::xtensor_fixed<double, xt::xshape<EquationData::dim>> min_corner = {0.0};
   xt::xtensor_fixed<double, xt::xshape<EquationData::dim>> max_corner = {1.0};
-  std::size_t min_level = 12;
-  std::size_t max_level = 12;
+  std::size_t min_level = 10;
+  std::size_t max_level = 10;
 
   /*--- Simulation parameters ---*/
   double Tf  = 3.2e-3;
@@ -49,7 +49,7 @@ int main(int argc, char* argv[]) {
   #elifdef TOT_ENERGY_6EQS
     bool apply_pressure_relax  = true;
     bool apply_pressure_reinit = false;
-    bool energy_update_phase_1 = true;
+    bool energy_update_phase_1 = false;
     bool preserve_energy       = false;
 
     // Create the instance of the class to perform the simulation

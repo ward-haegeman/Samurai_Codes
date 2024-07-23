@@ -397,6 +397,7 @@ namespace samurai {
                                               FluxValue<typename Flux<Field>::cfg> qL = field[left];
                                               FluxValue<typename Flux<Field>::cfg> qR = field[right];
 
+                                              /*
                                               const double beta = 1.0;
                                               for(std::size_t comp = 0; comp < Field::size; ++comp) {
                                                 if(field[right](comp) - field[left](comp) > 0.0) {
@@ -425,6 +426,7 @@ namespace samurai {
                                                                                                   beta*(field[right_right](comp) - field[right](comp)))));
                                                 }
                                               }
+                                              */
 
                                               FluxValue<typename Flux<Field>::cfg> F_minus,
                                                                                    F_plus;
@@ -883,6 +885,7 @@ namespace samurai {
                                                 FluxValue<typename Flux<Field>::cfg> qL = field[left];
                                                 FluxValue<typename Flux<Field>::cfg> qR = field[right];
 
+                                                /*
                                                 const double beta = 1.0;
                                                 for(std::size_t comp = 0; comp < Field::size; ++comp) {
                                                   if(field[right](comp) - field[left](comp) > 0.0) {
@@ -911,6 +914,7 @@ namespace samurai {
                                                                                                     beta*(field[right_right](comp) - field[right](comp)))));
                                                   }
                                                 }
+                                                */
 
                                                 return compute_discrete_flux(qL, qR, d);;
                                           };
