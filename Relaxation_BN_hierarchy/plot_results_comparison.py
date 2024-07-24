@@ -27,13 +27,17 @@ def line_plot(ax, x_Rusanov, y_Rusanov, x_HLLC, y_HLLC, x_HLLC_BR, y_HLLC_BR):
 
     #Read and plot the analytical results
     if args.analytical is not None:
+        if args.column_analytical is None:
+            sys.exit("Unknown column to be read for the analytical solution")
         data_analytical = np.genfromtxt(args.analytical)
-        plot_analytical = ax.plot(data_analytical[:,0], data_analytical[:,1], 'k-', linewidth=1.5, markersize=3, alpha=0.5)[0]
+        plot_analytical = ax.plot(data_analytical[:,0], data_analytical[:,args.column_analytical], 'k-', linewidth=1.5, markersize=3, alpha=0.5)[0]
 
     #Read and plot the reference results
     if args.reference is not None:
+        if args.column_reference is None:
+            sys.exit("Unknown column to be read for the reference solution")
         data_ref = np.genfromtxt(args.reference)
-        plot_ref = ax.plot(data_ref[:,0], data_ref[:,2], 'b-', linewidth=1.5, markersize=3, alpha=0.5)[0]
+        plot_ref = ax.plot(data_ref[:,0], data_ref[:,args.column_reference], 'b-', linewidth=1.5, markersize=3, alpha=0.5)[0]
 
     #Add legend
     if args.analytical is not None:
@@ -156,7 +160,9 @@ parser.add_argument('--end', type=int, required=False, default=None, help='itera
 parser.add_argument('--save', type=str, required=False, help='output file')
 parser.add_argument('--wait', type=int, default=200, required=False, help='time between two plot in ms')
 parser.add_argument('--analytical', type=str, required=False, help='analytical solution 5 equations model')
+parser.add_argument('--column_analytical', type=int, required=False, help='variable of analytical solution 5 equations model')
 parser.add_argument('--reference', type=str, required=False, help='reference results')
+parser.add_argument('--column_reference', type=int, required=False, help='variable of reference results')
 args = parser.parse_args()
 
 if args.end is None:
