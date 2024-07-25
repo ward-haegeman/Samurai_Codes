@@ -179,7 +179,7 @@ void WaveInterface<dim>::init_variables() {
   const double x_shock       = 0.3;
   const double x_interface   = 0.7;
   const double dx            = samurai::cell_length(mesh[mesh_id_t::cells].max_level());
-  const double eps_interface = 0.25*dx;
+  const double eps_interface = 3.0*dx;
   const double eps_shock     = 3.0*dx;
 
   // Initialize some fields to define the bubble with a loop over all cells

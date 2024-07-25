@@ -1,7 +1,7 @@
 #pragma once
 #include <samurai/schemes/fv.hpp>
 
-//#define ORDER_2
+#define ORDER_2
 
 namespace EquationData {
   // Declare spatial dimension
@@ -269,33 +269,144 @@ namespace samurai {
                                               FluxValue<typename Flux<Field>::cfg> qR = field[right];
 
                                               const double beta = 1.0;
-                                              for(std::size_t comp = 0; comp < Field::size; ++comp) {
-                                                if(field[right](comp) - field[left](comp) > 0.0) {
-                                                  qL(comp) += 0.5*std::max(0.0, std::max(std::min(beta*(field[left](comp) - field[left_left](comp)),
-                                                                                                  field[right](comp) - field[left](comp)),
-                                                                                         std::min(field[left](comp) - field[left_left](comp),
-                                                                                                  beta*(field[right](comp) - field[left](comp)))));
-                                                }
-                                                else if(field[right](comp) - field[left](comp) < 0.0) {
-                                                  qL(comp) += 0.5*std::min(0.0, std::min(std::max(beta*(field[left](comp) - field[left_left](comp)),
-                                                                                                  field[right](comp) - field[left](comp)),
-                                                                                         std::max(field[left](comp) - field[left_left](comp),
-                                                                                                  beta*(field[right](comp) - field[left](comp)))));
-                                                }
 
-                                                if(field[right_right](comp) - field[right](comp) > 0.0) {
-                                                  qR(comp) -= 0.5*std::max(0.0, std::max(std::min(beta*(field[right](comp) - field[left](comp)),
-                                                                                                  field[right_right](comp) - field[right](comp)),
-                                                                                         std::min(field[right](comp) - field[left](comp),
-                                                                                                  beta*(field[right_right](comp) - field[right](comp)))));
-                                                }
-                                                else if(field[right_right](comp) - field[right](comp) < 0.0) {
-                                                  qR(comp) -= 0.5*std::min(0.0, std::min(std::max(beta*(field[right](comp) - field[left](comp)),
-                                                                                                  field[right_right](comp) - field[right](comp)),
-                                                                                         std::max(field[right](comp) - field[left](comp),
-                                                                                                  beta*(field[right_right](comp) - field[right](comp)))));
-                                                }
+                                              // Reconstruct mass phase 1 and mass phase 2
+                                              if(field[right](M1_INDEX) - field[left](M1_INDEX) > 0.0) {
+                                                qL(M1_INDEX) += 0.5*std::max(0.0, std::max(std::min(beta*(field[left](M1_INDEX) - field[left_left](M1_INDEX)),
+                                                                                                          field[right](M1_INDEX) - field[left](M1_INDEX)),
+                                                                                           std::min(field[left](M1_INDEX) - field[left_left](M1_INDEX),
+                                                                                                    beta*(field[right](M1_INDEX) - field[left](M1_INDEX)))));
                                               }
+                                              else if(field[right](M1_INDEX) - field[left](M1_INDEX) < 0.0) {
+                                                qL(M1_INDEX) += 0.5*std::min(0.0, std::min(std::max(beta*(field[left](M1_INDEX) - field[left_left](M1_INDEX)),
+                                                                                                    field[right](M1_INDEX) - field[left](M1_INDEX)),
+                                                                                           std::max(field[left](M1_INDEX) - field[left_left](M1_INDEX),
+                                                                                                    beta*(field[right](M1_INDEX) - field[left](M1_INDEX)))));
+                                              }
+
+                                              if(field[right_right](M1_INDEX) - field[right](M1_INDEX) > 0.0) {
+                                                qR(M1_INDEX) -= 0.5*std::max(0.0, std::max(std::min(beta*(field[right](M1_INDEX) - field[left](M1_INDEX)),
+                                                                                                    field[right_right](M1_INDEX) - field[right](M1_INDEX)),
+                                                                                           std::min(field[right](M1_INDEX) - field[left](M1_INDEX),
+                                                                                                    beta*(field[right_right](M1_INDEX) - field[right](M1_INDEX)))));
+                                              }
+                                              else if(field[right_right](M1_INDEX) - field[right](M1_INDEX) < 0.0) {
+                                                qR(M1_INDEX) -= 0.5*std::min(0.0, std::min(std::max(beta*(field[right](M1_INDEX) - field[left](M1_INDEX)),
+                                                                                                    field[right_right](M1_INDEX) - field[right](M1_INDEX)),
+                                                                                           std::max(field[right](M1_INDEX) - field[left](M1_INDEX),
+                                                                                                    beta*(field[right_right](M1_INDEX) - field[right](M1_INDEX)))));
+                                              }
+
+                                              // Reconstruct mass phase 1 and mass phase 2
+                                              if(field[right](M2_INDEX) - field[left](M2_INDEX) > 0.0) {
+                                                qL(M2_INDEX) += 0.5*std::max(0.0, std::max(std::min(beta*(field[left](M2_INDEX) - field[left_left](M1_INDEX)),
+                                                                                                          field[right](M2_INDEX) - field[left](M1_INDEX)),
+                                                                                           std::min(field[left](M2_INDEX) - field[left_left](M2_INDEX),
+                                                                                                    beta*(field[right](M2_INDEX) - field[left](M2_INDEX)))));
+                                              }
+                                              else if(field[right](M2_INDEX) - field[left](M2_INDEX) < 0.0) {
+                                                qL(M2_INDEX) += 0.5*std::min(0.0, std::min(std::max(beta*(field[left](M2_INDEX) - field[left_left](M2_INDEX)),
+                                                                                                    field[right](M2_INDEX) - field[left](M2_INDEX)),
+                                                                                           std::max(field[left](M2_INDEX) - field[left_left](M2_INDEX),
+                                                                                                    beta*(field[right](M2_INDEX) - field[left](M2_INDEX)))));
+                                              }
+
+                                              if(field[right_right](M2_INDEX) - field[right](M2_INDEX) > 0.0) {
+                                                qR(M2_INDEX) -= 0.5*std::max(0.0, std::max(std::min(beta*(field[right](M2_INDEX) - field[left](M2_INDEX)),
+                                                                                                    field[right_right](M2_INDEX) - field[right](M2_INDEX)),
+                                                                                           std::min(field[right](M2_INDEX) - field[left](M2_INDEX),
+                                                                                                    beta*(field[right_right](M2_INDEX) - field[right](M2_INDEX)))));
+                                              }
+                                              else if(field[right_right](M2_INDEX) - field[right](M2_INDEX) < 0.0) {
+                                                qR(M2_INDEX) -= 0.5*std::min(0.0, std::min(std::max(beta*(field[right](M2_INDEX) - field[left](M2_INDEX)),
+                                                                                                    field[right_right](M2_INDEX) - field[right](M2_INDEX)),
+                                                                                           std::max(field[right](M2_INDEX) - field[left](M2_INDEX),
+                                                                                                    beta*(field[right_right](M2_INDEX) - field[right](M2_INDEX)))));
+                                              }
+
+                                              // Reconstruct volume fraction
+                                              const auto alpha1_LL = field[left_left](RHO_ALPHA1_INDEX)/
+                                                                     (field[left_left][M1_INDEX] + field[left_left][M2_INDEX]);
+                                              const auto alpha1_L  = field[left](RHO_ALPHA1_INDEX)/
+                                                                     (field[left][M1_INDEX] + field[left][M2_INDEX]);
+                                              const auto alpha1_R  = field[right](RHO_ALPHA1_INDEX)/
+                                                                     (field[right][M1_INDEX] + field[right][M2_INDEX]);
+                                              const auto alpha1_RR = field[right_right](RHO_ALPHA1_INDEX)/
+                                                                     (field[right_right][M1_INDEX] + field[right_right][M2_INDEX]);
+
+                                              auto alpha1_L_recon = alpha1_L;
+                                              auto alpha1_R_recon = alpha1_R;
+
+                                              if(alpha1_R - alpha1_L > 0.0) {
+                                                alpha1_L_recon += 0.5*std::max(0.0, std::max(std::min(beta*(alpha1_L - alpha1_LL),
+                                                                                                      alpha1_R - alpha1_L),
+                                                                                             std::min(alpha1_L - alpha1_LL,
+                                                                                                      beta*(alpha1_R - alpha1_L))));
+                                              }
+                                              else if(alpha1_R - alpha1_L < 0.0) {
+                                                alpha1_L_recon += 0.5*std::min(0.0, std::min(std::max(beta*(alpha1_L - alpha1_LL),
+                                                                                                      alpha1_R - alpha1_L),
+                                                                                             std::max(alpha1_L - alpha1_LL,
+                                                                                                      beta*(alpha1_R - alpha1_L))));
+                                              }
+
+                                              if(alpha1_RR - alpha1_R > 0.0) {
+                                                alpha1_R_recon -= 0.5*std::max(0.0, std::max(std::min(beta*(alpha1_R - alpha1_L),
+                                                                                                      alpha1_RR - alpha1_R),
+                                                                                             std::min(alpha1_R - alpha1_L,
+                                                                                                      beta*(alpha1_RR - alpha1_R))));
+                                              }
+                                              else if(alpha1_RR - alpha1_R < 0.0) {
+                                                alpha1_R_recon -= 0.5*std::min(0.0, std::min(std::max(beta*(alpha1_R - alpha1_L),
+                                                                                                      alpha1_RR - alpha1_R),
+                                                                                             std::max(alpha1_R - alpha1_L,
+                                                                                                      beta*(alpha1_RR - alpha1_R))));
+                                              }
+
+                                              qL(RHO_ALPHA1_INDEX) = (qL(M1_INDEX) + qL(M2_INDEX))*alpha1_L_recon;
+                                              qR(RHO_ALPHA1_INDEX) = (qR(M1_INDEX) + qR(M2_INDEX))*alpha1_R_recon;
+
+                                              // Reconstruct velocity
+                                              const auto u_LL = field[left_left](RHO_U_INDEX)/
+                                                                (field[left_left][M1_INDEX] + field[left_left][M2_INDEX]);
+                                              const auto u_L  = field[left](RHO_U_INDEX)/
+                                                                (field[left][M1_INDEX] + field[left][M2_INDEX]);
+                                              const auto u_R  = field[right](RHO_U_INDEX)/
+                                                                (field[right][M1_INDEX] + field[right][M2_INDEX]);
+                                              const auto u_RR = field[right_right](RHO_U_INDEX)/
+                                                                (field[right_right][M1_INDEX] + field[right_right][M2_INDEX]);
+
+                                              auto u_L_recon = u_L;
+                                              auto u_R_recon = u_R;
+
+                                              if(u_R - u_L > 0.0) {
+                                                u_L_recon += 0.5*std::max(0.0, std::max(std::min(beta*(u_L - u_LL),
+                                                                                                 u_R - u_L),
+                                                                                        std::min(u_L - u_LL,
+                                                                                                 beta*(u_R - u_L))));
+                                              }
+                                              else if(u_R - u_L < 0.0) {
+                                                u_L_recon += 0.5*std::min(0.0, std::min(std::max(beta*(u_L - u_LL),
+                                                                                                 u_R - u_L),
+                                                                                        std::max(u_L - u_LL,
+                                                                                                 beta*(u_R - u_L))));
+                                              }
+
+                                              if(u_RR - u_R > 0.0) {
+                                                u_R_recon -= 0.5*std::max(0.0, std::max(std::min(beta*(u_R - u_L),
+                                                                                                 u_RR - u_R),
+                                                                                        std::min(u_R - u_L,
+                                                                                                 beta*(u_RR - u_R))));
+                                              }
+                                              else if(u_RR - u_R < 0.0) {
+                                                u_R_recon -= 0.5*std::min(0.0, std::min(std::max(beta*(u_R - u_L),
+                                                                                                 u_RR - u_R),
+                                                                                        std::max(u_R - u_L,
+                                                                                                 beta*(u_RR - u_R))));
+                                              }
+
+                                              qL(RHO_U_INDEX) = (qL(M1_INDEX) + qL(M2_INDEX))*u_L_recon;
+                                              qR(RHO_U_INDEX) = (qR(M1_INDEX) + qR(M2_INDEX))*u_R_recon;
                                             #else
                                               // Compute the stencil and extract state
                                               const auto& left  = cells[0];
@@ -689,33 +800,144 @@ namespace samurai {
                                               FluxValue<typename Flux<Field>::cfg> qR = field[right];
 
                                               const double beta = 1.0;
-                                              for(std::size_t comp = 0; comp < Field::size; ++comp) {
-                                                if(field[right](comp) - field[left](comp) > 0.0) {
-                                                  qL(comp) += 0.5*std::max(0.0, std::max(std::min(beta*(field[left](comp) - field[left_left](comp)),
-                                                                                                  field[right](comp) - field[left](comp)),
-                                                                                         std::min(field[left](comp) - field[left_left](comp),
-                                                                                                  beta*(field[right](comp) - field[left](comp)))));
-                                                }
-                                                else if(field[right](comp) - field[left](comp) < 0.0) {
-                                                  qL(comp) += 0.5*std::min(0.0, std::min(std::max(beta*(field[left](comp) - field[left_left](comp)),
-                                                                                                  field[right](comp) - field[left](comp)),
-                                                                                         std::max(field[left](comp) - field[left_left](comp),
-                                                                                                  beta*(field[right](comp) - field[left](comp)))));
-                                                }
 
-                                                if(field[right_right](comp) - field[right](comp) > 0.0) {
-                                                  qR(comp) -= 0.5*std::max(0.0, std::max(std::min(beta*(field[right](comp) - field[left](comp)),
-                                                                                                  field[right_right](comp) - field[right](comp)),
-                                                                                         std::min(field[right](comp) - field[left](comp),
-                                                                                                  beta*(field[right_right](comp) - field[right](comp)))));
-                                                }
-                                                else if(field[right_right](comp) - field[right](comp) < 0.0) {
-                                                  qR(comp) -= 0.5*std::min(0.0, std::min(std::max(beta*(field[right](comp) - field[left](comp)),
-                                                                                                  field[right_right](comp) - field[right](comp)),
-                                                                                         std::max(field[right](comp) - field[left](comp),
-                                                                                                  beta*(field[right_right](comp) - field[right](comp)))));
-                                                }
+                                              // Reconstruct mass phase 1 and mass phase 2
+                                              if(field[right](M1_INDEX) - field[left](M1_INDEX) > 0.0) {
+                                                qL(M1_INDEX) += 0.5*std::max(0.0, std::max(std::min(beta*(field[left](M1_INDEX) - field[left_left](M1_INDEX)),
+                                                                                                          field[right](M1_INDEX) - field[left](M1_INDEX)),
+                                                                                           std::min(field[left](M1_INDEX) - field[left_left](M1_INDEX),
+                                                                                                    beta*(field[right](M1_INDEX) - field[left](M1_INDEX)))));
                                               }
+                                              else if(field[right](M1_INDEX) - field[left](M1_INDEX) < 0.0) {
+                                                qL(M1_INDEX) += 0.5*std::min(0.0, std::min(std::max(beta*(field[left](M1_INDEX) - field[left_left](M1_INDEX)),
+                                                                                                    field[right](M1_INDEX) - field[left](M1_INDEX)),
+                                                                                           std::max(field[left](M1_INDEX) - field[left_left](M1_INDEX),
+                                                                                                    beta*(field[right](M1_INDEX) - field[left](M1_INDEX)))));
+                                              }
+
+                                              if(field[right_right](M1_INDEX) - field[right](M1_INDEX) > 0.0) {
+                                                qR(M1_INDEX) -= 0.5*std::max(0.0, std::max(std::min(beta*(field[right](M1_INDEX) - field[left](M1_INDEX)),
+                                                                                                    field[right_right](M1_INDEX) - field[right](M1_INDEX)),
+                                                                                           std::min(field[right](M1_INDEX) - field[left](M1_INDEX),
+                                                                                                    beta*(field[right_right](M1_INDEX) - field[right](M1_INDEX)))));
+                                              }
+                                              else if(field[right_right](M1_INDEX) - field[right](M1_INDEX) < 0.0) {
+                                                qR(M1_INDEX) -= 0.5*std::min(0.0, std::min(std::max(beta*(field[right](M1_INDEX) - field[left](M1_INDEX)),
+                                                                                                    field[right_right](M1_INDEX) - field[right](M1_INDEX)),
+                                                                                           std::max(field[right](M1_INDEX) - field[left](M1_INDEX),
+                                                                                                    beta*(field[right_right](M1_INDEX) - field[right](M1_INDEX)))));
+                                              }
+
+                                              // Reconstruct mass phase 1 and mass phase 2
+                                              if(field[right](M2_INDEX) - field[left](M2_INDEX) > 0.0) {
+                                                qL(M2_INDEX) += 0.5*std::max(0.0, std::max(std::min(beta*(field[left](M2_INDEX) - field[left_left](M1_INDEX)),
+                                                                                                          field[right](M2_INDEX) - field[left](M1_INDEX)),
+                                                                                           std::min(field[left](M2_INDEX) - field[left_left](M2_INDEX),
+                                                                                                    beta*(field[right](M2_INDEX) - field[left](M2_INDEX)))));
+                                              }
+                                              else if(field[right](M2_INDEX) - field[left](M2_INDEX) < 0.0) {
+                                                qL(M2_INDEX) += 0.5*std::min(0.0, std::min(std::max(beta*(field[left](M2_INDEX) - field[left_left](M2_INDEX)),
+                                                                                                    field[right](M2_INDEX) - field[left](M2_INDEX)),
+                                                                                           std::max(field[left](M2_INDEX) - field[left_left](M2_INDEX),
+                                                                                                    beta*(field[right](M2_INDEX) - field[left](M2_INDEX)))));
+                                              }
+
+                                              if(field[right_right](M2_INDEX) - field[right](M2_INDEX) > 0.0) {
+                                                qR(M2_INDEX) -= 0.5*std::max(0.0, std::max(std::min(beta*(field[right](M2_INDEX) - field[left](M2_INDEX)),
+                                                                                                    field[right_right](M2_INDEX) - field[right](M2_INDEX)),
+                                                                                           std::min(field[right](M2_INDEX) - field[left](M2_INDEX),
+                                                                                                    beta*(field[right_right](M2_INDEX) - field[right](M2_INDEX)))));
+                                              }
+                                              else if(field[right_right](M2_INDEX) - field[right](M2_INDEX) < 0.0) {
+                                                qR(M2_INDEX) -= 0.5*std::min(0.0, std::min(std::max(beta*(field[right](M2_INDEX) - field[left](M2_INDEX)),
+                                                                                                    field[right_right](M2_INDEX) - field[right](M2_INDEX)),
+                                                                                           std::max(field[right](M2_INDEX) - field[left](M2_INDEX),
+                                                                                                    beta*(field[right_right](M2_INDEX) - field[right](M2_INDEX)))));
+                                              }
+
+                                              // Reconstruct volume fraction
+                                              const auto alpha1_LL = field[left_left](RHO_ALPHA1_INDEX)/
+                                                                     (field[left_left][M1_INDEX] + field[left_left][M2_INDEX]);
+                                              const auto alpha1_L  = field[left](RHO_ALPHA1_INDEX)/
+                                                                     (field[left][M1_INDEX] + field[left][M2_INDEX]);
+                                              const auto alpha1_R  = field[right](RHO_ALPHA1_INDEX)/
+                                                                     (field[right][M1_INDEX] + field[right][M2_INDEX]);
+                                              const auto alpha1_RR = field[right_right](RHO_ALPHA1_INDEX)/
+                                                                     (field[right_right][M1_INDEX] + field[right_right][M2_INDEX]);
+
+                                              auto alpha1_L_recon = alpha1_L;
+                                              auto alpha1_R_recon = alpha1_R;
+
+                                              if(alpha1_R - alpha1_L > 0.0) {
+                                                alpha1_L_recon += 0.5*std::max(0.0, std::max(std::min(beta*(alpha1_L - alpha1_LL),
+                                                                                                      alpha1_R - alpha1_L),
+                                                                                             std::min(alpha1_L - alpha1_LL,
+                                                                                                      beta*(alpha1_R - alpha1_L))));
+                                              }
+                                              else if(alpha1_R - alpha1_L < 0.0) {
+                                                alpha1_L_recon += 0.5*std::min(0.0, std::min(std::max(beta*(alpha1_L - alpha1_LL),
+                                                                                                      alpha1_R - alpha1_L),
+                                                                                             std::max(alpha1_L - alpha1_LL,
+                                                                                                      beta*(alpha1_R - alpha1_L))));
+                                              }
+
+                                              if(alpha1_RR - alpha1_R > 0.0) {
+                                                alpha1_R_recon -= 0.5*std::max(0.0, std::max(std::min(beta*(alpha1_R - alpha1_L),
+                                                                                                      alpha1_RR - alpha1_R),
+                                                                                             std::min(alpha1_R - alpha1_L,
+                                                                                                      beta*(alpha1_RR - alpha1_R))));
+                                              }
+                                              else if(alpha1_RR - alpha1_R < 0.0) {
+                                                alpha1_R_recon -= 0.5*std::min(0.0, std::min(std::max(beta*(alpha1_R - alpha1_L),
+                                                                                                      alpha1_RR - alpha1_R),
+                                                                                             std::max(alpha1_R - alpha1_L,
+                                                                                                      beta*(alpha1_RR - alpha1_R))));
+                                              }
+
+                                              qL(RHO_ALPHA1_INDEX) = (qL(M1_INDEX) + qL(M2_INDEX))*alpha1_L_recon;
+                                              qR(RHO_ALPHA1_INDEX) = (qR(M1_INDEX) + qR(M2_INDEX))*alpha1_R_recon;
+
+                                              // Reconstruct velocity
+                                              const auto u_LL = field[left_left](RHO_U_INDEX)/
+                                                                (field[left_left][M1_INDEX] + field[left_left][M2_INDEX]);
+                                              const auto u_L  = field[left](RHO_U_INDEX)/
+                                                                (field[left][M1_INDEX] + field[left][M2_INDEX]);
+                                              const auto u_R  = field[right](RHO_U_INDEX)/
+                                                                (field[right][M1_INDEX] + field[right][M2_INDEX]);
+                                              const auto u_RR = field[right_right](RHO_U_INDEX)/
+                                                                (field[right_right][M1_INDEX] + field[right_right][M2_INDEX]);
+
+                                              auto u_L_recon = u_L;
+                                              auto u_R_recon = u_R;
+
+                                              if(u_R - u_L > 0.0) {
+                                                u_L_recon += 0.5*std::max(0.0, std::max(std::min(beta*(u_L - u_LL),
+                                                                                                 u_R - u_L),
+                                                                                        std::min(u_L - u_LL,
+                                                                                                 beta*(u_R - u_L))));
+                                              }
+                                              else if(u_R - u_L < 0.0) {
+                                                u_L_recon += 0.5*std::min(0.0, std::min(std::max(beta*(u_L - u_LL),
+                                                                                                 u_R - u_L),
+                                                                                        std::max(u_L - u_LL,
+                                                                                                 beta*(u_R - u_L))));
+                                              }
+
+                                              if(u_RR - u_R > 0.0) {
+                                                u_R_recon -= 0.5*std::max(0.0, std::max(std::min(beta*(u_R - u_L),
+                                                                                                 u_RR - u_R),
+                                                                                        std::min(u_R - u_L,
+                                                                                                 beta*(u_RR - u_R))));
+                                              }
+                                              else if(u_RR - u_R < 0.0) {
+                                                u_R_recon -= 0.5*std::min(0.0, std::min(std::max(beta*(u_R - u_L),
+                                                                                                 u_RR - u_R),
+                                                                                        std::max(u_R - u_L,
+                                                                                                 beta*(u_RR - u_R))));
+                                              }
+
+                                              qL(RHO_U_INDEX) = (qL(M1_INDEX) + qL(M2_INDEX))*u_L_recon;
+                                              qR(RHO_U_INDEX) = (qR(M1_INDEX) + qR(M2_INDEX))*u_R_recon;
                                             #else
                                               // Compute the stencil and extract state
                                               const auto& left  = cells[0];
