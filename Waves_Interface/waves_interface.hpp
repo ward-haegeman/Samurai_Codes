@@ -348,7 +348,7 @@ void WaveInterface<dim>::run() {
 
   // Save the initial condition
   const std::string suffix_init = (nfiles != 1) ? "_ite_0" : "";
-  save(path, filename, suffix_init, conserved_variables, alpha1, rho, p1, p2, p);
+  save(path, filename, suffix_init, conserved_variables, alpha1, rho, p1, p2, p, u);
 
   // Set initial time step
   const double dx = samurai::cell_length(mesh[mesh_id_t::cells].max_level());
@@ -533,7 +533,7 @@ void WaveInterface<dim>::run() {
                               u[cell] = conserved_variables[cell][RHO_U_INDEX]/rho[cell];
                              });
 
-      save(path, filename, suffix, conserved_variables, alpha1, rho, p1, p2, p);
+      save(path, filename, suffix, conserved_variables, alpha1, rho, p1, p2, p, u);
     }
   }
 }
