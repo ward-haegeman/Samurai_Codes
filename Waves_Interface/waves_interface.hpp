@@ -179,7 +179,7 @@ void WaveInterface<dim>::init_variables() {
   const double x_shock       = 0.3;
   const double x_interface   = 0.7;
   const double dx            = samurai::cell_length(mesh[mesh_id_t::cells].max_level());
-  const double eps_interface = 3.0*dx;
+  const double eps_interface = 0.25*dx;
   const double eps_shock     = 3.0*dx;
 
   // Initialize some fields to define the bubble with a loop over all cells
@@ -323,10 +323,21 @@ void WaveInterface<dim>::run() {
   #elifdef GODUNOV_FLUX
     std::string filename = "waves_interface_Godunov";
   #endif
+
+  #ifdef ORDER_2
+    filename = filename + "_order2";
+  #else
+    filename = filename + "_order1";
+  #endif
+
   const double dt_save = Tf/static_cast<double>(nfiles);
 
   // Auxiliary variable to save updated fields
-  auto conserved_variables_np1 = samurai::make_field<double, EquationData::NVARS>("conserved_np1", mesh);
+  #ifdef ORDER_2
+    auto conserved_variables_tmp   = samurai::make_field<double, EquationData::NVARS>("conserved_tmp", mesh);
+    auto conserved_variables_tmp_2 = samurai::make_field<double, EquationData::NVARS>("conserved_tmp_2", mesh);
+  #endif
+  auto conserved_variables_np1   = samurai::make_field<double, EquationData::NVARS>("conserved_np1", mesh);
 
   // Create the flux variable
   #ifdef RUSANOV_FLUX
@@ -336,7 +347,7 @@ void WaveInterface<dim>::run() {
   #endif
 
   // Save the initial condition
-  const std::string suffix_init = (nfiles != 1) ? "_order_1_ite_0" : "";
+  const std::string suffix_init = (nfiles != 1) ? "_ite_0" : "";
   save(path, filename, suffix_init, conserved_variables, alpha1, rho, p1, p2, p);
 
   // Set initial time step
@@ -364,10 +375,15 @@ void WaveInterface<dim>::run() {
     /*--- Apply the numerical scheme without relaxation ---*/
     samurai::update_ghost_mr(conserved_variables);
     auto flux_conserved = numerical_flux(conserved_variables);
-    conserved_variables_np1.resize();
-    conserved_variables_np1 = conserved_variables - dt*flux_conserved;
-
-    std::swap(conserved_variables.array(), conserved_variables_np1.array());
+    #ifdef ORDER_2
+      conserved_variables_tmp.resize();
+      conserved_variables_tmp = conserved_variables - dt*flux_conserved;
+      std::swap(conserved_variables.array(), conserved_variables_tmp.array());
+    #else
+      conserved_variables_np1.resize();
+      conserved_variables_np1 = conserved_variables - dt*flux_conserved;
+      std::swap(conserved_variables.array(), conserved_variables_np1.array());
+    #endif
 
     // Sanity check (and numerical artefacts to clear data) after hyperbolic step
     // and before Newton loop (if desired).
@@ -423,12 +439,75 @@ void WaveInterface<dim>::run() {
       apply_relaxation();
     }
 
+    /*--- Consider the second stage for the second order ---*/
+    #ifdef ORDER_2
+      // Apply the numerical scheme
+      samurai::update_ghost_mr(conserved_variables);
+      flux_conserved = numerical_flux(conserved_variables);
+      conserved_variables_tmp_2.resize();
+      conserved_variables_tmp_2 = conserved_variables - dt*flux_conserved;
+      conserved_variables_np1   = 0.5*(conserved_variables_tmp + conserved_variables_tmp_2);
+      std::swap(conserved_variables.array(), conserved_variables_np1.array());
+
+      // Sanity check (and numerical artefacts to clear data) after hyperbolic step
+      // and before Newton loop (if desired).
+      samurai::for_each_cell(mesh,
+                             [&](const auto& cell)
+                             {
+                               // Start with rho_alpha1
+                               if(conserved_variables[cell][RHO_ALPHA1_INDEX] < 0.0) {
+                                 if(conserved_variables[cell][RHO_ALPHA1_INDEX] < -1e-10) {
+                                   std::cerr << " Negative volume fraction at the beginning of the relaxation" << std::endl;
+                                   save(fs::current_path(), "waves_interface", "_diverged", conserved_variables);
+                                   exit(1);
+                                 }
+                                 conserved_variables[cell][RHO_ALPHA1_INDEX] = 0.0;
+                               }
+                               // Sanity check for m1
+                               if(conserved_variables[cell][M1_INDEX] < 0.0) {
+                                 if(conserved_variables[cell][M1_INDEX] < -1e-14) {
+                                   std::cerr << "Negative mass for phase 1 at the beginning of the relaxation" << std::endl;
+                                   save(fs::current_path(), "waves_interface", "_diverged", conserved_variables);
+                                   exit(1);
+                                 }
+                                 conserved_variables[cell][M1_INDEX] = 0.0;
+                               }
+                               // Sanity check for m2
+                               if(conserved_variables[cell][M2_INDEX] < 0.0) {
+                                 if(conserved_variables[cell][M2_INDEX] < -1e-14) {
+                                   std::cerr << "Negative mass for phase 2 at the beginning of the relaxation" << std::endl;
+                                   save(fs::current_path(), "waves_interface", "_diverged", conserved_variables);
+                                   exit(1);
+                                 }
+                                 conserved_variables[cell][M2_INDEX] = 0.0;
+                               }
+
+                               // Update volume fraction (and consequently density)
+                               rho[cell]    = conserved_variables[cell][M1_INDEX]
+                                            + conserved_variables[cell][M2_INDEX];
+
+                               alpha1[cell] = std::min(std::max(0.0, conserved_variables[cell][RHO_ALPHA1_INDEX]/rho[cell]), 1.0);
+                             });
+
+      // Apply the relaxation
+      if(apply_relax) {
+        // Apply relaxation if desired, which will modify alpha1 and, consequently, for what
+        // concerns next time step, rho_alpha1
+        samurai::for_each_cell(mesh,
+                               [&](const auto& cell)
+                               {
+                                 dalpha1[cell] = std::numeric_limits<double>::infinity();
+                               });
+        apply_relaxation();
+      }
+    #endif
+
     /*--- Compute updated time step ---*/
     dt = std::min(Tf - t, cfl*dx/get_max_lambda());
 
     /*--- Save the results ---*/
     if(t >= static_cast<double>(nsave + 1) * dt_save || t == Tf) {
-      const std::string suffix = (nfiles != 1) ? fmt::format("_order_1_ite_{}", ++nsave) : "";
+      const std::string suffix = (nfiles != 1) ? fmt::format("_ite_{}", ++nsave) : "";
 
       // Compute auxliary fields for the output
       samurai::for_each_cell(mesh,
@@ -444,11 +523,13 @@ void WaveInterface<dim>::run() {
                                const auto rho2   = (alpha2 > eps) ? conserved_variables[cell][M2_INDEX]/alpha2 : nan("");
                                p2[cell]          = EOS_phase2.pres_value(rho2);
 
+                               p.resize();
                                p[cell]           = (alpha1[cell] > eps && alpha2 > eps) ?
                                                    alpha1[cell]*p1[cell] + alpha2*p2[cell] :
                                                    ((alpha1[cell] < eps) ? p2[cell] : p1[cell]);
 
                               // Compute velocity field
+                              u.resize();
                               u[cell] = conserved_variables[cell][RHO_U_INDEX]/rho[cell];
                              });
 
