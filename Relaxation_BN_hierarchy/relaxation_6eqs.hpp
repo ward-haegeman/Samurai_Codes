@@ -18,6 +18,8 @@ namespace fs = std::filesystem;
 //#define HLLC_BR_FLUX
 //#define RUSANOV_FLUX
 
+//#define RELAX_POLYNOM
+
 // Specify the use of this namespace where we just store the indices
 // and some parameters related to the equations of state
 using namespace EquationData;
@@ -36,7 +38,7 @@ public:
              const xt::xtensor_fixed<double, xt::xshape<dim>>& max_corner,
              std::size_t min_level, std::size_t max_level,
              double Tf_, double cfl_, std::size_t nfiles_ = 100,
-             bool do_pres_relax = true, bool do_pres_reinit = true,
+             bool do_pres_relax = true, bool do_pres_reinit = false,
              bool do_energy_update_phase_1 = true, bool do_preserve_energy = false); // Class constrcutor with the arguments related
                                                                                      // to the grid, to the physics and to the relaxation.
                                                                                      // Maybe in the future,
@@ -66,9 +68,11 @@ private:
   std::size_t nfiles; // Number of files desired for output
 
   bool apply_pressure_relax;        // Set whether to apply or not the pressure relaxation
-  bool apply_pressure_reinit;       // Set whether to apply or not the reinitialization step for the pressure
-  bool start_energy_update_phase_1; // Start the energy update from phase 1 or 2
-  bool preserve_energy;             // Set how to update the total energy during the pressure relaxation
+  #ifdef RELAX_POLYNOM
+    bool apply_pressure_reinit;       // Set whether to apply or not the reinitialization step for the pressure
+    bool start_energy_update_phase_1; // Start the energy update from phase 1 or 2
+    bool preserve_energy;             // Set how to update the total energy during the pressure relaxation
+  #endif
 
   Field conserved_variables; // The variable which stores the conserved variables,
                              // namely the varialbes for which we solve a PDE system
@@ -119,50 +123,38 @@ private:
   void update_pressure_before_relaxation(); // Update pressure fields before relaxation
 
   void apply_instantaneous_pressure_relaxation(); // Apply an instantaneous pressure relaxation
+
+  void apply_instantaneous_pressure_relaxation_polynomial(); // Apply an instantaneous pressure relaxation (polynomial method Saurel based)
 };
 
 // Implement class constructor
 //
-#if defined RUSANOV_FLUX || defined HLLC_BR_FLUX
-  template<std::size_t dim>
-  Relaxation<dim>::Relaxation(const xt::xtensor_fixed<double, xt::xshape<dim>>& min_corner,
-                              const xt::xtensor_fixed<double, xt::xshape<dim>>& max_corner,
-                              std::size_t min_level, std::size_t max_level,
-                              double Tf_, double cfl_, std::size_t nfiles_,
-                              bool do_pres_relax, bool do_pres_reinit,
-                              bool do_energy_update_phase_1, bool do_preserve_energy):
-    box(min_corner, max_corner), mesh(box, min_level, max_level, {false}),
-    Tf(Tf_), cfl(cfl_), nfiles(nfiles_),
-    apply_pressure_relax(do_pres_relax), apply_pressure_reinit(do_pres_reinit),
+template<std::size_t dim>
+Relaxation<dim>::Relaxation(const xt::xtensor_fixed<double, xt::xshape<dim>>& min_corner,
+                            const xt::xtensor_fixed<double, xt::xshape<dim>>& max_corner,
+                            std::size_t min_level, std::size_t max_level,
+                            double Tf_, double cfl_, std::size_t nfiles_,
+                            bool do_pres_relax, bool do_pres_reinit,
+                            bool do_energy_update_phase_1, bool do_preserve_energy):
+  box(min_corner, max_corner), mesh(box, min_level, max_level, {false}),
+  Tf(Tf_), cfl(cfl_), nfiles(nfiles_),  apply_pressure_relax(do_pres_relax),
+  #ifdef RELAX_POLYNOM
+    apply_pressure_reinit(do_pres_reinit),
     start_energy_update_phase_1(do_energy_update_phase_1), preserve_energy(do_preserve_energy),
-    EOS_phase1(EquationData::gamma_1, EquationData::pi_infty_1, EquationData::q_infty_1),
-    EOS_phase2(EquationData::gamma_2, EquationData::pi_infty_2, EquationData::q_infty_2),
-    numerical_flux_cons(EOS_phase1, EOS_phase2),
-    numerical_flux_non_cons(EOS_phase1, EOS_phase2) {
-      std::cout << "Initializing variables" << std::endl;
-      std::cout << std::endl;
-      init_variables();
-    }
-#elifdef HLLC_FLUX
-  template<std::size_t dim>
-  Relaxation<dim>::Relaxation(const xt::xtensor_fixed<double, xt::xshape<dim>>& min_corner,
-                              const xt::xtensor_fixed<double, xt::xshape<dim>>& max_corner,
-                              std::size_t min_level, std::size_t max_level,
-                              double Tf_, double cfl_, std::size_t nfiles_,
-                              bool do_pres_relax, bool do_pres_reinit,
-                              bool do_energy_update_phase_1, bool do_preserve_energy):
-    box(min_corner, max_corner), mesh(box, min_level, max_level, {false}),
-    Tf(Tf_), cfl(cfl_), nfiles(nfiles_),
-    apply_pressure_relax(do_pres_relax), apply_pressure_reinit(do_pres_reinit),
-    start_energy_update_phase_1(do_energy_update_phase_1), preserve_energy(do_preserve_energy),
-    EOS_phase1(EquationData::gamma_1, EquationData::pi_infty_1, EquationData::q_infty_1),
-    EOS_phase2(EquationData::gamma_2, EquationData::pi_infty_2, EquationData::q_infty_2),
-    numerical_flux(EOS_phase1, EOS_phase2) {
-      std::cout << "Initializing variables" << std::endl;
-      std::cout << std::endl;
-      init_variables();
-    }
-#endif
+  #endif
+  EOS_phase1(EquationData::gamma_1, EquationData::pi_infty_1, EquationData::q_infty_1),
+  EOS_phase2(EquationData::gamma_2, EquationData::pi_infty_2, EquationData::q_infty_2),
+  #if defined RUSANOV_FLUX || defined HLCC_BR_FLUX
+      numerical_flux_cons(EOS_phase1, EOS_phase2),
+      numerical_flux_non_cons(EOS_phase1, EOS_phase2)
+  #else
+      numerical_flux(EOS_phase1, EOS_phase2)
+  #endif
+  {
+    std::cout << "Initializing variables" << std::endl;
+    std::cout << std::endl;
+    init_variables();
+  }
 
 // Initialization of conserved and auxiliary variables
 //
@@ -322,6 +314,94 @@ void Relaxation<dim>::apply_instantaneous_pressure_relaxation() {
   samurai::for_each_cell(mesh,
                          [&](const auto& cell)
                          {
+                            /*--- Save some quantities which remain constant during relaxation
+                                  for the sake of convenience and readability ---*/
+                            const auto rhoE_0 = conserved_variables[cell][ALPHA1_RHO1_E1_INDEX]
+                                              + conserved_variables[cell][ALPHA2_RHO2_E2_INDEX];
+
+                            const auto arho1_0 = conserved_variables[cell][ALPHA1_RHO1_INDEX];
+                            const auto arho2_0 = conserved_variables[cell][ALPHA2_RHO2_INDEX];
+
+                            const auto rho_0 = arho1_0 + arho2_0;
+
+                            auto vel_squared = 0.0;
+                            for(std::size_t d = 0; d < EquationData::dim; ++d) {
+                              const auto vel_d = conserved_variables[cell][RHO_U_INDEX + d]/rho_0;
+                              vel_squared += vel_d*vel_d;
+                            }
+
+                            const auto e_0 = rhoE_0/rho_0 - 0.5*vel_squared;
+
+                            const auto Y1_0 = arho1_0/rho_0;
+                            const auto Y2_0 = 1.0 - Y1_0;
+
+                            const auto gammaM1_1 = EquationData::gamma_1 - 1.0;
+                            const auto gammaM1_2 = EquationData::gamma_2 - 1.0;
+
+                            const auto gampinf_1 = EquationData::gamma_1 * EquationData::pi_infty_1;
+                            const auto gampinf_2 = EquationData::gamma_2 * EquationData::pi_infty_2;
+
+                            /*--- Take interface pressure equal to the liquid one (for the moment) ---*/
+                            auto pres1 = p1[cell];
+                            auto pres2 = p2[cell];
+                            auto& pI   = pres1;
+
+                            const auto Laplace_cst_1 = (pres1 + EquationData::pi_infty_1)/
+                                                       std::pow(arho1_0/conserved_variables[cell][ALPHA1_INDEX], EquationData::gamma_1);
+                            //const auto Laplace_cst_2 = (pres2 + EquationData::pi_infty_2)/
+                            //                           std::pow(arho2_0/(1.0 - conserved_variables[cell][ALPHA1_INDEX]), EquationData::gamma_2);
+
+                            /*--- Newton method to compute the new volume fraction ---*/
+                            const double tol             = 1e-8;
+                            const double lambda          = 0.9; // Bound preserving parameter
+                            const unsigned int max_iters = 100;
+                            auto alpha_max               = 1.0;
+                            auto alpha_min               = 0.0;
+
+                            auto dalpha1      = 0.0;
+                            unsigned int nite = 0;
+                            while (nite < max_iters && 2.0*(alpha_max - alpha_min)/(alpha_max + alpha_min) > tol) {
+                              pres1 > pres2 ? alpha_min = conserved_variables[cell][ALPHA1_INDEX] :
+                                              alpha_max = conserved_variables[cell][ALPHA1_INDEX];
+
+                              dalpha1 = (pres1 - pres2)/
+                                        std::abs((pres1 + gammaM1_1*pI + gampinf_1)/conserved_variables[cell][ALPHA1_INDEX] +
+                                                 (pres2 + gammaM1_2*pI + gampinf_2)/(1.0 - conserved_variables[cell][ALPHA1_INDEX]));
+
+                              // Bound preserving strategy
+                              dalpha1 = std::min(dalpha1, lambda*(alpha_max - conserved_variables[cell][ALPHA1_INDEX]));
+                              dalpha1 = std::max(dalpha1, lambda*(alpha_min - conserved_variables[cell][ALPHA1_INDEX]));
+
+                              conserved_variables[cell][ALPHA1_INDEX] += dalpha1;
+
+                              // Update pressure variables for next step and to update interfacial pressure
+                              const auto rho1 = arho1_0/conserved_variables[cell][ALPHA1_INDEX];
+                              const auto rho2 = arho2_0/(1.0 - conserved_variables[cell][ALPHA1_INDEX]);
+
+                              pres1         = std::pow(rho1, EquationData::gamma_1)*Laplace_cst_1 - EquationData::pi_infty_1;
+                              const auto e2 = (e_0 - Y1_0*EOS_phase1.e_value(rho1, pres1))/Y2_0;
+                              pres2         = EOS_phase2.pres_value(rho2, e2);
+
+                              /*pres2         = std::pow(rho2, EquationData::gamma_2)*Laplace_cst_2 - EquationData::pi_infty_2;
+                              const auto e1 = (e_0 - Y2_0*EOS_phase2.e_value(rho2, pres2)))/Y1_0;
+                              pres1         = EOS_phase1.pres_value(rho1, e1);*/
+
+                              nite++;
+                            }
+
+                            conserved_variables[cell][ALPHA1_RHO1_E1_INDEX] = arho1_0*(EOS_phase1.e_value(arho1_0/conserved_variables[cell][ALPHA1_INDEX], pres1) +
+                                                                                       0.5*vel_squared);
+                            conserved_variables[cell][ALPHA2_RHO2_E2_INDEX] = rhoE_0 - conserved_variables[cell][ALPHA1_RHO1_E1_INDEX];
+                          });
+}
+
+// Apply the instantaneous relaxation for the pressure (polynomial method Saurel)
+//
+template<std::size_t dim>
+void Relaxation<dim>::apply_instantaneous_pressure_relaxation_polynomial() {
+  samurai::for_each_cell(mesh,
+                         [&](const auto& cell)
+                         {
                            /*--- Save mixture total energy for later update ---*/
                            const auto rhoE_0 = conserved_variables[cell][ALPHA1_RHO1_E1_INDEX]
                                              + conserved_variables[cell][ALPHA2_RHO2_E2_INDEX];
@@ -456,10 +536,11 @@ void Relaxation<dim>::update_auxiliary_fields() {
                            rho[cell] = conserved_variables[cell][ALPHA1_RHO1_INDEX]
                                      + conserved_variables[cell][ALPHA2_RHO2_INDEX];
 
+                           vel[cell] = conserved_variables[cell][RHO_U_INDEX]/rho[cell];
+
                            /*--- Phase 1 ---*/
                            rho1[cell] = conserved_variables[cell][ALPHA1_RHO1_INDEX]/conserved_variables[cell][ALPHA1_INDEX]; /*--- TODO: Add treatment for
                                                                                                                                           vanishing volume fraction ---*/
-                           vel[cell] = conserved_variables[cell][RHO_U_INDEX]/rho[cell];
 
                            auto e1 = conserved_variables[cell][ALPHA1_RHO1_E1_INDEX]/conserved_variables[cell][ALPHA1_RHO1_INDEX]; /*--- TODO: Add treatment for
                                                                                                                                                vanishing volume fraction ---*/
@@ -615,7 +696,11 @@ void Relaxation<dim>::run() {
     // Apply the relaxation for the pressure
     if(apply_pressure_relax) {
       update_pressure_before_relaxation();
-      apply_instantaneous_pressure_relaxation();
+      #ifdef RELAX_POLYNOM
+        apply_instantaneous_pressure_relaxation_polynomial();
+      #else
+        apply_instantaneous_pressure_relaxation();
+      #endif
     }
 
     // Consider the second stage for the second order
@@ -641,7 +726,11 @@ void Relaxation<dim>::run() {
       // Apply the relaxation for the pressure
       if(apply_pressure_relax) {
         update_pressure_before_relaxation();
-        apply_instantaneous_pressure_relaxation();
+        #ifdef RELAX_POLYNOM
+          apply_instantaneous_pressure_relaxation_polynomial();
+        #else
+          apply_instantaneous_pressure_relaxation();
+        #endif
       }
     #endif
 

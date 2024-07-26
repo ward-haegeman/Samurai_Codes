@@ -47,16 +47,20 @@ int main(int argc, char* argv[]) {
 
     Relaxation_Sim.run();
   #elifdef TOT_ENERGY_6EQS
-    bool apply_pressure_relax  = true;
-    bool apply_pressure_reinit = false;
-    bool energy_update_phase_1 = true;
-    bool preserve_energy       = false;
+    bool apply_pressure_relax = true;
+    #ifdef RELAX_POLYNOM
+      bool apply_pressure_reinit = false;
+      bool energy_update_phase_1 = true;
+      bool preserve_energy       = false;
 
-    // Create the instance of the class to perform the simulation
-    auto Relaxation_Sim = Relaxation(min_corner, max_corner, min_level, max_level,
-                                     Tf, cfl, nfiles,
-                                     apply_pressure_relax, apply_pressure_reinit,
-                                     energy_update_phase_1, preserve_energy);
+      auto Relaxation_Sim = Relaxation(min_corner, max_corner, min_level, max_level,
+                                       Tf, cfl, nfiles, apply_pressure_relax,
+                                       apply_pressure_reinit,
+                                       energy_update_phase_1, preserve_energy);
+    #else
+      auto Relaxation_Sim = Relaxation(min_corner, max_corner, min_level, max_level,
+                                       Tf, cfl, nfiles, apply_pressure_relax);
+    #endif
 
     Relaxation_Sim.run();
   #elifdef INT_ENERGY_6EQS
