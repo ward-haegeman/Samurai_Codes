@@ -28,7 +28,7 @@ int main(int argc, char* argv[]) {
   double cfl = 0.5;
 
   /*--- Output parameters ---*/
-  std::size_t nfiles = 20;
+  std::size_t nfiles = 10;
 
   /*--- Perform the simulation ---*/
   #ifdef FULL_BN
@@ -49,7 +49,7 @@ int main(int argc, char* argv[]) {
   #elifdef TOT_ENERGY_6EQS
     bool apply_pressure_relax = true;
     #ifdef RELAX_POLYNOM
-      bool apply_pressure_reinit = false;
+      bool apply_pressure_reinit = true;
       bool energy_update_phase_1 = true;
       bool preserve_energy       = false;
 
