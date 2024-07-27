@@ -198,32 +198,32 @@ void Relaxation<dim>::init_variables() {
   de2    = samurai::make_field<double, 1>("de2", mesh);
 
   /*--- Set the initial state ---*/
-  const double xd = 0.5;
+  const double xd = 0.75;
 
   // Initialize the fields with a loop over all cells
-  const double alpha1L = 1.0 - 1e-2;
+  const double alpha1L = 1.0 - 1e-6;
 
-  const double velL    = -2.0;
+  const double velL    = 0.0;
 
-  const double p1L     = 1e5;
-  const double rho1L   = 1150.0;
+  const double p1L     = 1e9;
+  const double rho1L   = 1000.0;
 
   const double alpha2L = 1.0 - alpha1L;
 
-  const double p2L     = 1e5;
-  const double rho2L   = 0.63;
+  const double p2L     = 1e9;
+  const double rho2L   = 1.0;
 
-  const double alpha1R = alpha1L;
+  const double alpha1R = 1.0 - alpha1L;
 
-  const double velR    = 2.0;
+  const double velR    = 0.0;
 
   const double p1R     = 1e5;
-  const double rho1R   = 1150.0;
+  const double rho1R   = 1000.0;
 
   const double alpha2R = 1.0 - alpha1R;
 
   const double p2R     = 1e5;
-  const double rho2R   = 0.63;
+  const double rho2R   = 1.0;
 
   samurai::for_each_cell(mesh,
                          [&](const auto& cell)
@@ -361,7 +361,7 @@ void Relaxation<dim>::apply_instantaneous_pressure_relaxation() {
                             /*--- Take interface pressure equal to the liquid one (for the moment) ---*/
                             auto pres1 = p1[cell];
                             auto pres2 = p2[cell];
-                            auto& pI   = pres1;
+                            auto& pI   = pres2;
 
                             //const auto Laplace_cst_1 = (pres1 + EquationData::pi_infty_1)/
                             //                           std::pow(arho1_0/conserved_variables[cell][ALPHA1_INDEX], EquationData::gamma_1);
@@ -648,7 +648,7 @@ void Relaxation<dim>::run() {
     auto conserved_variables_tmp   = samurai::make_field<double, EquationData::NVARS>("conserved_tmp", mesh);
     auto conserved_variables_tmp_2 = samurai::make_field<double, EquationData::NVARS>("conserved_tmp_2", mesh);
   #endif
-  auto conserved_variables_np1   = samurai::make_field<double, EquationData::NVARS>("conserved_np1", mesh);
+  auto conserved_variables_np1 = samurai::make_field<double, EquationData::NVARS>("conserved_np1", mesh);
 
   /*--- Create the flux variables ---*/
   #ifdef RUSANOV_FLUX
@@ -683,8 +683,8 @@ void Relaxation<dim>::run() {
     samurai::update_ghost_mr(conserved_variables);
     samurai::update_bc(conserved_variables);
     #ifdef RUSANOV_FLUX
-      auto Cons_Flux          = Rusanov_flux(conserved_variables);
-      auto NonCons_Flux       = NonConservative_flux(conserved_variables);
+      auto Cons_Flux    = Rusanov_flux(conserved_variables);
+      auto NonCons_Flux = NonConservative_flux(conserved_variables);
 
       #ifdef ORDER_2
         conserved_variables_tmp = conserved_variables - dt*Cons_Flux - dt*NonCons_Flux;
@@ -692,7 +692,7 @@ void Relaxation<dim>::run() {
         conserved_variables_np1 = conserved_variables - dt*Cons_Flux - dt*NonCons_Flux;
       #endif
     #elifdef HLLC_FLUX
-      auto Total_Flux         = HLLC_flux(conserved_variables);
+      auto Total_Flux = HLLC_flux(conserved_variables);
 
       #ifdef ORDER_2
         conserved_variables_tmp = conserved_variables - dt*Total_Flux;
@@ -700,8 +700,8 @@ void Relaxation<dim>::run() {
         conserved_variables_np1 = conserved_variables - dt*Total_Flux;
       #endif
     #elifdef HLLC_BR_FLUX
-      auto Cons_Flux          = HLLC_Conservative_flux(conserved_variables);
-      auto NonCons_Flux       = NonConservative_flux(conserved_variables);
+      auto Cons_Flux    = HLLC_Conservative_flux(conserved_variables);
+      auto NonCons_Flux = NonConservative_flux(conserved_variables);
 
       #ifdef ORDER_2
         conserved_variables_tmp = conserved_variables - dt*Cons_Flux - dt*NonCons_Flux;
@@ -732,15 +732,18 @@ void Relaxation<dim>::run() {
       samurai::update_ghost_mr(conserved_variables);
       samurai::update_bc(conserved_variables);
       #ifdef RUSANOV_FLUX
-        Cons_Flux                 = Rusanov_flux(conserved_variables);
-        NonCons_Flux              = NonConservative_flux(conserved_variables);
+        Cons_Flux    = Rusanov_flux(conserved_variables);
+        NonCons_Flux = NonConservative_flux(conserved_variables);
+
         conserved_variables_tmp_2 = conserved_variables - dt*Cons_Flux - dt*NonCons_Flux;
       #elifdef HLLC_FLUX
-        Total_Flux                = HLLC_flux(conserved_variables);
+        Total_Flux = HLLC_flux(conserved_variables);
+
         conserved_variables_tmp_2 = conserved_variables - dt*Total_Flux;
       #elifdef HLLC_BR_FLUX
-        Cons_Flux                 = HLLC_Conservative_flux(conserved_variables);
-        NonCons_Flux              = NonConservative_flux(conserved_variables);
+        Cons_Flux    = HLLC_Conservative_flux(conserved_variables);
+        NonCons_Flux = NonConservative_flux(conserved_variables);
+
         conserved_variables_tmp_2 = conserved_variables - dt*Cons_Flux - dt*NonCons_Flux;
       #endif
       conserved_variables_np1 = 0.5*(conserved_variables_tmp + conserved_variables_tmp_2);

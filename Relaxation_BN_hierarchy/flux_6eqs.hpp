@@ -23,13 +23,13 @@ namespace EquationData {
   static constexpr std::size_t NVARS = ALPHA2_RHO2_E2_INDEX + 1;
 
   /*--- Parameters related to the EOS for the two phases ---*/
-  static constexpr double gamma_1    = 2.35;
-  static constexpr double pi_infty_1 = 1e9;
-  static constexpr double q_infty_1  = -1167e3;
+  static constexpr double gamma_1    = 4.4;
+  static constexpr double pi_infty_1 = 6e8;
+  static constexpr double q_infty_1  = 0.0;
 
-  static constexpr double gamma_2    = 1.43;
+  static constexpr double gamma_2    = 1.4;
   static constexpr double pi_infty_2 = 0.0;
-  static constexpr double q_infty_2  = 2030e3;
+  static constexpr double q_infty_2  = 0.0;
 }
 
 
@@ -826,7 +826,7 @@ namespace samurai {
     const auto q_star_L = compute_middle_state(qL, sL, s_star, curr_d);
     const auto q_star_R = compute_middle_state(qR, sR, s_star, curr_d);
 
-    /*--- Compute the fluctuations (wave propagation formalism) ---*/
+    /*--- Compute the flux ---*/
     if(sL >= 0.0) {
       return this->evaluate_continuous_flux(qL, curr_d);
     }
