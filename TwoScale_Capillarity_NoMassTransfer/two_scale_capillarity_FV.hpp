@@ -28,7 +28,6 @@ namespace EquationData {
   static constexpr std::size_t RHO_U_INDEX          = 3;
 
   static constexpr std::size_t ALPHA1_BAR_INDEX = RHO_ALPHA1_BAR_INDEX;
-  static constexpr std::size_t U_INDEX          = RHO_U_INDEX;
 
   // Save also the total number of (scalar) variables
   static constexpr std::size_t NVARS = 3 + dim;
@@ -263,12 +262,12 @@ namespace samurai {
   template<class Field>
   FluxValue<typename Flux<Field>::cfg> Flux<Field>::cons2prim(const FluxValue<cfg>& cons) const {
 
-    FluxValue<cfg> prim;
+    FluxValue<cfg> prim = cons;
 
     prim(M1_INDEX)         = cons(M1_INDEX);
     prim(M2_INDEX)         = cons(M2_INDEX);
     prim(ALPHA1_BAR_INDEX) = cons(RHO_ALPHA1_BAR_INDEX)/(cons(M1_INDEX) + cons(M2_INDEX));
-    prim(U_INDEX)          = cons(RHO_U_INDEX)/(cons(M1_INDEX) + cons(M2_INDEX));
+    prim(RHO_U_INDEX)      = cons(RHO_U_INDEX);
 
     return prim;
   }
@@ -278,12 +277,12 @@ namespace samurai {
   template<class Field>
   FluxValue<typename Flux<Field>::cfg> Flux<Field>::prim2cons(const FluxValue<cfg>& prim) const {
 
-    FluxValue<cfg> cons;
+    FluxValue<cfg> cons = prim;
 
     cons(M1_INDEX)             = prim(M1_INDEX);
     cons(M2_INDEX)             = prim(M2_INDEX);
     cons(RHO_ALPHA1_BAR_INDEX) = (prim(M1_INDEX) + prim(M2_INDEX))*prim(ALPHA1_BAR_INDEX);
-    cons(RHO_U_INDEX)          = (prim(M1_INDEX) + prim(M2_INDEX))*prim(U_INDEX);
+    cons(RHO_U_INDEX)          = prim(RHO_U_INDEX);
 
     return cons;
   }
@@ -300,7 +299,11 @@ namespace samurai {
                 const double eps_,
                 const double mod_grad_alpha1_bar_min_); // Constructor which accepts in inputs the equations of state of the two phases
 
-    auto make_two_scale_capillarity(const auto& grad_alpha1_bar); // Compute the flux over all cells
+    #ifdef ORDER_2
+      auto make_two_scale_capillarity(const auto& grad_alpha1_bar, const auto& H); // Compute the flux over all cells
+    #else
+      auto make_two_scale_capillarity(const auto& grad_alpha1_bar); // Compute the flux over all cells
+    #endif
 
   private:
     FluxValue<typename Flux<Field>::cfg> compute_discrete_flux(const FluxValue<typename Flux<Field>::cfg>& qL,
@@ -366,7 +369,12 @@ namespace samurai {
   // Implement the contribution of the discrete flux for all the cells in the mesh.
   //
   template<class Field>
-  auto RusanovFlux<Field>::make_two_scale_capillarity(const auto& grad_alpha1_bar) {
+  #ifdef ORDER_2
+  auto RusanovFlux<Field>::make_two_scale_capillarity(const auto& grad_alpha1_bar, const auto& H)
+  #else
+  auto RusanovFlux<Field>::make_two_scale_capillarity(const auto& grad_alpha1_bar)
+  #endif
+  {
     FluxDefinition<typename Flux<Field>::cfg> Rusanov_f;
 
     // Perform the loop over each dimension to compute the flux contribution
@@ -423,8 +431,52 @@ namespace samurai {
                                                 }
                                               }
 
-                                              const FluxValue<typename Flux<Field>::cfg> qL = this->prim2cons(primL_recon);
-                                              const FluxValue<typename Flux<Field>::cfg> qR = this->prim2cons(primR_recon);
+                                              FluxValue<typename Flux<Field>::cfg> qL = this->prim2cons(primL_recon);
+                                              FluxValue<typename Flux<Field>::cfg> qR = this->prim2cons(primR_recon);
+
+                                              // Relax the interpolated state
+                                              const double tol    = 1e-12; /*--- Tolerance of the Newton method ---*/
+                                              const double lambda = 0.9;   /*--- Parameter for bound preserving strategy ---*/
+
+                                              // Start with left state
+                                              std::size_t Newton_iter = 0;
+                                              bool relaxation_applied = true;
+                                              double dalpha1_barL     = std::numeric_limits<double>::infinity();
+                                              double alpha1_barL      = qL(RHO_ALPHA1_BAR_INDEX)/
+                                                                        (qL(M1_INDEX) + qL(M2_INDEX));
+                                              while(relaxation_applied == true) {
+                                                relaxation_applied = false;
+                                                Newton_iter++;
+
+                                                this->perform_Newton_step_relaxation(std::make_unique<decltype(qL)>(qL), H[left],
+                                                                                     dalpha1_barL, alpha1_barL, relaxation_applied, tol, lambda);
+
+                                                // Newton cycle diverged
+                                                if(Newton_iter > 60) {
+                                                  std::cout << "Netwon method not converged in the relaxation of left state after MUSCL" << std::endl;
+                                                  exit(1);
+                                                }
+                                              }
+
+                                              // Focus now on right state
+                                              Newton_iter         = 0;
+                                              relaxation_applied  = true;
+                                              double dalpha1_barR = std::numeric_limits<double>::infinity();
+                                              double alpha1_barR  = qR(RHO_ALPHA1_BAR_INDEX)/
+                                                                    (qR(M1_INDEX) + qR(M2_INDEX));
+                                              while(relaxation_applied == true) {
+                                                relaxation_applied = false;
+                                                Newton_iter++;
+
+                                                this->perform_Newton_step_relaxation(std::make_unique<decltype(qR)>(qR), H[right],
+                                                                                     dalpha1_barR, alpha1_barR, relaxation_applied, tol, lambda);
+
+                                                // Newton cycle diverged
+                                                if(Newton_iter > 60) {
+                                                  std::cout << "Netwon method not converged in the relaxation of right state after MUSCL" << std::endl;
+                                                  exit(1);
+                                                }
+                                              }
                                             #else
                                               // Compute the stencil and extract state
                                               const auto& left  = cells[0];
@@ -455,7 +507,11 @@ namespace samurai {
                 const double eps_,
                 const double mod_grad_alpha1_bar_min_); // Constructor which accepts in inputs the equations of state of the two phases
 
-    auto make_two_scale_capillarity(const auto& grad_alpha1_bar); // Compute the flux over all cells
+    #ifdef ORDER_2
+      auto make_two_scale_capillarity(const auto& grad_alpha1_bar, const auto& H); // Compute the flux over all cells
+    #else
+      auto make_two_scale_capillarity(const auto& grad_alpha1_bar); // Compute the flux over all cells
+    #endif
 
   private:
     FluxValue<typename Flux<Field>::cfg> compute_discrete_flux(const FluxValue<typename Flux<Field>::cfg>& qL,
@@ -870,7 +926,12 @@ namespace samurai {
   // Implement the contribution of the discrete flux for all the cells in the mesh.
   //
   template<class Field>
-  auto GodunovFlux<Field>::make_two_scale_capillarity(const auto& grad_alpha1_bar) {
+  #ifdef ORDER_2
+  auto GodunovFlux<Field>::make_two_scale_capillarity(const auto& grad_alpha1_bar, const auto& H)
+  #else
+  auto GodunovFlux<Field>::make_two_scale_capillarity(const auto& grad_alpha1_bar)
+  #endif
+  {
     FluxDefinition<typename Flux<Field>::cfg> Godunov_f;
 
     // Perform the loop over each dimension to compute the flux contribution
@@ -927,8 +988,52 @@ namespace samurai {
                                                 }
                                               }
 
-                                              const FluxValue<typename Flux<Field>::cfg> qL = this->prim2cons(primL_recon);
-                                              const FluxValue<typename Flux<Field>::cfg> qR = this->prim2cons(primR_recon);
+                                              FluxValue<typename Flux<Field>::cfg> qL = this->prim2cons(primL_recon);
+                                              FluxValue<typename Flux<Field>::cfg> qR = this->prim2cons(primR_recon);
+
+                                              // Relax the interpolated state
+                                              const double tol    = 1e-12; /*--- Tolerance of the Newton method ---*/
+                                              const double lambda = 0.9;   /*--- Parameter for bound preserving strategy ---*/
+
+                                              // Start with left state
+                                              std::size_t Newton_iter = 0;
+                                              bool relaxation_applied = true;
+                                              double dalpha1_barL     = std::numeric_limits<double>::infinity();
+                                              double alpha1_barL      = qL(RHO_ALPHA1_BAR_INDEX)/
+                                                                        (qL(M1_INDEX) + qL(M2_INDEX));
+                                              while(relaxation_applied == true) {
+                                                relaxation_applied = false;
+                                                Newton_iter++;
+
+                                                this->perform_Newton_step_relaxation(std::make_unique<decltype(qL)>(qL), H[left],
+                                                                                     dalpha1_barL, alpha1_barL, relaxation_applied, tol, lambda);
+
+                                                // Newton cycle diverged
+                                                if(Newton_iter > 60) {
+                                                  std::cout << "Netwon method not converged in the relaxation of left state after MUSCL" << std::endl;
+                                                  exit(1);
+                                                }
+                                              }
+
+                                              // Focus now on right state
+                                              Newton_iter         = 0;
+                                              relaxation_applied  = true;
+                                              double dalpha1_barR = std::numeric_limits<double>::infinity();
+                                              double alpha1_barR  = qR(RHO_ALPHA1_BAR_INDEX)/
+                                                                    (qR(M1_INDEX) + qR(M2_INDEX));
+                                              while(relaxation_applied == true) {
+                                                relaxation_applied = false;
+                                                Newton_iter++;
+
+                                                this->perform_Newton_step_relaxation(std::make_unique<decltype(qR)>(qR), H[right],
+                                                                                     dalpha1_barR, alpha1_barR, relaxation_applied, tol, lambda);
+
+                                                // Newton cycle diverged
+                                                if(Newton_iter > 60) {
+                                                  std::cout << "Netwon method not converged in the relaxation of right state after MUSCL" << std::endl;
+                                                  exit(1);
+                                                }
+                                              }
                                             #else
                                               // Compute the stencil and extract state
                                               const auto& left  = cells[0];

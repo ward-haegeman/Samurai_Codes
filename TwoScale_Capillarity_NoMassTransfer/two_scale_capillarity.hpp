@@ -385,6 +385,12 @@ void TwoScaleCapillarity<dim>::run() {
   #endif
   const double dt_save = Tf/static_cast<double>(nfiles);
 
+  #ifdef ORDER_2
+    filename = filename + "_order2";
+  #else
+    filename = filename + "_order1";
+  #endif
+
   // Auxiliary variables to save updated fields
   #ifdef ORDER_2
     auto conserved_variables_tmp   = samurai::make_field<double, EquationData::NVARS>("conserved_tmp", mesh);
@@ -394,9 +400,17 @@ void TwoScaleCapillarity<dim>::run() {
 
   // Create the flux variable
   #ifdef RUSANOV_FLUX
-    auto numerical_flux = Rusanov_flux.make_two_scale_capillarity(grad_alpha1_bar);
+    #ifdef ORDER_2
+      auto numerical_flux = Rusanov_flux.make_two_scale_capillarity(grad_alpha1_bar, H);
+    #else
+      auto numerical_flux = Rusanov_flux.make_two_scale_capillarity(grad_alpha1_bar);
+    #endif
   #elifdef GODUNOV_FLUX
-    auto numerical_flux = Godunov_flux.make_two_scale_capillarity(grad_alpha1_bar);
+    #ifdef ORDER_2
+      auto numerical_flux = Godunov_flux.make_two_scale_capillarity(grad_alpha1_bar, H);
+    #else
+      auto numerical_flux = Godunov_flux.make_two_scale_capillarity(grad_alpha1_bar);
+    #endif
   #endif
 
   // Save the initial condition
