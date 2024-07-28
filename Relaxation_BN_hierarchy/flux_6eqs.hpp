@@ -23,12 +23,12 @@ namespace EquationData {
   static constexpr std::size_t NVARS = ALPHA2_RHO2_E2_INDEX + 1;
 
   /*--- Parameters related to the EOS for the two phases ---*/
-  static constexpr double gamma_1    = 4.4;
-  static constexpr double pi_infty_1 = 6e8;
+  static constexpr double gamma_1    = 2.43;
+  static constexpr double pi_infty_1 = 5.3e9;
   static constexpr double q_infty_1  = 0.0;
 
-  static constexpr double gamma_2    = 1.4;
-  static constexpr double pi_infty_2 = 0.0;
+  static constexpr double gamma_2    = 1.62;
+  static constexpr double pi_infty_2 = 141e9;
   static constexpr double q_infty_2  = 0.0;
 }
 

@@ -24,7 +24,7 @@ int main(int argc, char* argv[]) {
   std::size_t max_level = 12;
 
   /*--- Simulation parameters ---*/
-  double Tf  = 2.4e-4;
+  double Tf  = 2.9e-5;
   double cfl = 0.45;
 
   /*--- Output parameters ---*/
