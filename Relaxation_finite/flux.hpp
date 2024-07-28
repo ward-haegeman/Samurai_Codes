@@ -6,8 +6,11 @@
 
 #include "eos.hpp"
 
+//#define ORDER_2
+//#define BR
+
 namespace EquationData {
-  static constexpr std::size_t dim = 2; /*--- Spatial dimension. It would be ideal to be able to get it
+  static constexpr std::size_t dim = 1; /*--- Spatial dimension. It would be ideal to be able to get it
                                               direclty from Field, but I need to move the definition of these indices ---*/
 
   /*--- Declare suitable static variables for the sake of generalities in the indices ---*/
@@ -22,8 +25,8 @@ namespace EquationData {
   static constexpr std::size_t NVARS = ALPHA2_RHO2_E2_INDEX + 1;
 
   /*--- Parameters related to the EOS for the two phases ---*/
-  static constexpr double gamma_1    = 3.0;
-  static constexpr double pi_infty_1 = 100.0;
+  static constexpr double gamma_1    = 1.4;
+  static constexpr double pi_infty_1 = 0.0;
   static constexpr double q_infty_1  = 0.0;
 
   static constexpr double gamma_2    = 1.4;
@@ -329,25 +332,40 @@ namespace samurai {
     }
     const auto pIR   = this->phase2.pres_value(rho2R, e2R);
 
-    /*--- Build the non conservative flux (Bassi-Rebay formulation) ---*/
-    F_minus(ALPHA1_INDEX) = (0.5*(velIL*qL(ALPHA1_INDEX) + velIR*qR(ALPHA1_INDEX)) -
-                             0.5*(velIL + velIR)*qL(ALPHA1_INDEX));
-    F_plus(ALPHA1_INDEX) = (0.5*(velIL*qL(ALPHA1_INDEX) + velIR*qR(ALPHA1_INDEX)) -
-                            0.5*(velIL + velIR)*qR(ALPHA1_INDEX));
+    /*--- Build the non conservative flux ---*/
+    #ifdef BR
+      F_minus(ALPHA1_INDEX) = (0.5*(velIL*qL(ALPHA1_INDEX) + velIR*qR(ALPHA1_INDEX)) -
+                               0.5*(velIL + velIR)*qL(ALPHA1_INDEX));
+      F_plus(ALPHA1_INDEX) = (0.5*(velIL*qL(ALPHA1_INDEX) + velIR*qR(ALPHA1_INDEX)) -
+                              0.5*(velIL + velIR)*qR(ALPHA1_INDEX));
 
-    F_minus(ALPHA1_RHO1_U1_INDEX + curr_d) = -(0.5*(pIL*qL(ALPHA1_INDEX) + pIR*qR(ALPHA1_INDEX)) -
-                                               0.5*(pIL + pIR)*qL(ALPHA1_INDEX));
-    F_minus(ALPHA2_RHO2_U2_INDEX + curr_d) = -F_minus(ALPHA1_RHO1_U1_INDEX + curr_d);
-    F_plus(ALPHA1_RHO1_U1_INDEX + curr_d)  = -(0.5*(pIL*qL(ALPHA1_INDEX) + pIR*qR(ALPHA1_INDEX)) -
-                                               0.5*(pIL + pIR)*qR(ALPHA1_INDEX));
-    F_plus(ALPHA2_RHO2_U2_INDEX + curr_d)  = -F_plus(ALPHA1_RHO1_U1_INDEX + curr_d);
+      F_minus(ALPHA1_RHO1_U1_INDEX + curr_d) = -(0.5*(pIL*qL(ALPHA1_INDEX) + pIR*qR(ALPHA1_INDEX)) -
+                                                 0.5*(pIL + pIR)*qL(ALPHA1_INDEX));
+      F_minus(ALPHA2_RHO2_U2_INDEX + curr_d) = -F_minus(ALPHA1_RHO1_U1_INDEX + curr_d);
+      F_plus(ALPHA1_RHO1_U1_INDEX + curr_d)  = -(0.5*(pIL*qL(ALPHA1_INDEX) + pIR*qR(ALPHA1_INDEX)) -
+                                                 0.5*(pIL + pIR)*qR(ALPHA1_INDEX));
+      F_plus(ALPHA2_RHO2_U2_INDEX + curr_d)  = -F_plus(ALPHA1_RHO1_U1_INDEX + curr_d);
 
-    F_minus(ALPHA1_RHO1_E1_INDEX) = -(0.5*(pIL*velIL*qL(ALPHA1_INDEX) + pIR*velIR*qR(ALPHA1_INDEX)) -
-                                      0.5*(pIL*velIL + pIR*velIR)*qL(ALPHA1_INDEX));
-    F_minus(ALPHA2_RHO2_E2_INDEX) = -F_minus(ALPHA1_RHO1_E1_INDEX);
-    F_plus(ALPHA1_RHO1_E1_INDEX)  = -(0.5*(pIL*velIL*qL(ALPHA1_INDEX) + pIR*velIR*qR(ALPHA1_INDEX)) -
-                                      0.5*(pIL*velIL + pIR*velIR)*qR(ALPHA1_INDEX));
-    F_plus(ALPHA2_RHO2_E2_INDEX)  = -F_plus(ALPHA1_RHO1_E1_INDEX);
+      F_minus(ALPHA1_RHO1_E1_INDEX) = -(0.5*(pIL*velIL*qL(ALPHA1_INDEX) + pIR*velIR*qR(ALPHA1_INDEX)) -
+                                        0.5*(pIL*velIL + pIR*velIR)*qL(ALPHA1_INDEX));
+      F_minus(ALPHA2_RHO2_E2_INDEX) = -F_minus(ALPHA1_RHO1_E1_INDEX);
+      F_plus(ALPHA1_RHO1_E1_INDEX)  = -(0.5*(pIL*velIL*qL(ALPHA1_INDEX) + pIR*velIR*qR(ALPHA1_INDEX)) -
+                                        0.5*(pIL*velIL + pIR*velIR)*qR(ALPHA1_INDEX));
+      F_plus(ALPHA2_RHO2_E2_INDEX)  = -F_plus(ALPHA1_RHO1_E1_INDEX);
+    #else
+      F_minus(ALPHA1_INDEX) = 0.5*velIL*qR(ALPHA1_INDEX);
+      F_plus(ALPHA1_INDEX)  = 0.5*velIR*qL(ALPHA1_INDEX);
+
+      F_minus(ALPHA1_RHO1_U1_INDEX + curr_d) = -0.5*pIL*qR(ALPHA1_INDEX);
+      F_minus(ALPHA2_RHO2_U2_INDEX + curr_d) = -F_minus(ALPHA1_RHO1_U1_INDEX + curr_d);
+      F_plus(ALPHA1_RHO1_U1_INDEX + curr_d)  = -0.5*pIR*qL(ALPHA1_INDEX);
+      F_plus(ALPHA2_RHO2_U2_INDEX + curr_d)  = -F_plus(ALPHA1_RHO1_U1_INDEX + curr_d);
+
+      F_minus(ALPHA1_RHO1_E1_INDEX) = -0.5*velIL*pIL*qR(ALPHA1_INDEX);
+      F_minus(ALPHA2_RHO2_E2_INDEX) = -F_minus(ALPHA1_RHO1_E1_INDEX);
+      F_plus(ALPHA1_RHO1_E1_INDEX)  = -0.5*velIR*pIR*qL(ALPHA1_INDEX);
+      F_plus(ALPHA2_RHO2_E2_INDEX)  = -F_plus(ALPHA1_RHO1_E1_INDEX);
+    #endif
   }
 
   // Implement the contribution of the discrete flux for all the cells in the mesh.
