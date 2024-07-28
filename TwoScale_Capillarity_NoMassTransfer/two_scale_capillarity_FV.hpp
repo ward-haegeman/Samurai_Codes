@@ -1,9 +1,12 @@
 #pragma once
 #include <samurai/schemes/fv.hpp>
 
+#define ORDER_2
+
 namespace EquationData {
   // Declare spatial dimension
-  static constexpr std::size_t dim = 2;
+  static constexpr std::size_t dim = 2; // Spatial dimension. It would be ideal to be able to get it
+                                        // direclty from Field, but I need to move the definition of these indices
 
   // Declare parameters related to surface tension coefficient
   static constexpr double sigma = 1e-2;
@@ -24,6 +27,9 @@ namespace EquationData {
   static constexpr std::size_t RHO_ALPHA1_BAR_INDEX = 2;
   static constexpr std::size_t RHO_U_INDEX          = 3;
 
+  static constexpr std::size_t ALPHA1_BAR_INDEX = RHO_ALPHA1_BAR_INDEX;
+  static constexpr std::size_t U_INDEX          = RHO_U_INDEX;
+
   // Save also the total number of (scalar) variables
   static constexpr std::size_t NVARS = 3 + dim;
 }
@@ -43,7 +49,11 @@ namespace samurai {
     static_assert(field_size == EquationData::NVARS, "The number of elements in the state does not correpsond to the number of equations");
     static_assert(Field::dim == EquationData::dim, "The spatial dimesions do not match");
     static constexpr std::size_t output_field_size = field_size;
-    static constexpr std::size_t stencil_size      = 2;
+    #ifdef ORDER_2
+      static constexpr std::size_t stencil_size = 4;
+    #else
+      static constexpr std::size_t stencil_size = 2;
+    #endif
 
     using cfg = FluxConfig<SchemeType::NonLinear, output_field_size, stencil_size, Field>;
 
@@ -72,6 +82,10 @@ namespace samurai {
 
     const double eps;                     // Tolerance of pure phase to set NaNs
     const double mod_grad_alpha1_bar_min; // Tolerance to compute the unit normal
+
+    FluxValue<cfg> cons2prim(const FluxValue<cfg>& cons) const; // Conversion from conservative to primitive variables
+
+    FluxValue<cfg> prim2cons(const FluxValue<cfg>& prim) const; // Conversion from primitive to conservative variabless
   };
 
   // Class constructor in order to be able to work with the equation of state
@@ -217,13 +231,13 @@ namespace samurai {
        alpha1_bar > eps && 1.0 - alpha1_bar > eps) {
       relaxation_applied = true;
 
-      // Compute the derivative w.r.t large scale volume fraction recalling that for a barotropic EOS dp/drho = c^2
+      // Compute the derivative w.r.t large-scale volume fraction recalling that for a barotropic EOS dp/drho = c^2
       const auto dF_dalpha1_bar = -(*conserved_variables)(M1_INDEX)/(alpha1_bar*alpha1_bar)*
                                    phase1.c_value(rho1)*phase1.c_value(rho1)
                                   -(*conserved_variables)(M2_INDEX)/((1.0 - alpha1_bar)*(1.0 - alpha1_bar))*
                                    phase2.c_value(rho2)*phase2.c_value(rho2);
 
-      // Compute the large scale volume fraction update
+      // Compute the large-scale volume fraction update
       dalpha1_bar = -F/dF_dalpha1_bar;
       if(dalpha1_bar > 0.0) {
         dalpha1_bar = std::min(dalpha1_bar, lambda*(1.0 - alpha1_bar));
@@ -244,6 +258,36 @@ namespace samurai {
     (*conserved_variables)(RHO_ALPHA1_BAR_INDEX) = rho*alpha1_bar;
   }
 
+  // Conversion from conserved to primitive variables
+  //
+  template<class Field>
+  FluxValue<typename Flux<Field>::cfg> Flux<Field>::cons2prim(const FluxValue<cfg>& cons) const {
+
+    FluxValue<cfg> prim;
+
+    prim(M1_INDEX)         = cons(M1_INDEX);
+    prim(M2_INDEX)         = cons(M2_INDEX);
+    prim(ALPHA1_BAR_INDEX) = cons(RHO_ALPHA1_BAR_INDEX)/(cons(M1_INDEX) + cons(M2_INDEX));
+    prim(U_INDEX)          = cons(RHO_U_INDEX)/(cons(M1_INDEX) + cons(M2_INDEX));
+
+    return prim;
+  }
+
+  // Conversion from primitive to conserved variables
+  //
+  template<class Field>
+  FluxValue<typename Flux<Field>::cfg> Flux<Field>::prim2cons(const FluxValue<cfg>& prim) const {
+
+    FluxValue<cfg> cons;
+
+    cons(M1_INDEX)             = prim(M1_INDEX);
+    cons(M2_INDEX)             = prim(M2_INDEX);
+    cons(RHO_ALPHA1_BAR_INDEX) = (prim(M1_INDEX) + prim(M2_INDEX))*prim(ALPHA1_BAR_INDEX);
+    cons(RHO_U_INDEX)          = (prim(M1_INDEX) + prim(M2_INDEX))*prim(U_INDEX);
+
+    return cons;
+  }
+
 
   /**
     * Implementation of a Rusanov flux
@@ -256,13 +300,14 @@ namespace samurai {
                 const double eps_,
                 const double mod_grad_alpha1_bar_min_); // Constructor which accepts in inputs the equations of state of the two phases
 
+    auto make_two_scale_capillarity(const auto& grad_alpha1_bar); // Compute the flux over all cells
+
+  private:
     FluxValue<typename Flux<Field>::cfg> compute_discrete_flux(const FluxValue<typename Flux<Field>::cfg>& qL,
                                                                const FluxValue<typename Flux<Field>::cfg>& qR,
                                                                const std::size_t curr_d,
                                                                const auto& grad_alpha1_barL,
                                                                const auto& grad_alpha1_barR); // Rusanov flux along direction curr_d
-
-    auto make_two_scale_capillarity(const auto& grad_alpha1_bar); // Compute the flux over all cells
   };
 
   // Constructor derived from the base class
@@ -334,12 +379,60 @@ namespace samurai {
         // Compute now the "discrete" flux function, in this case a Rusanov flux
         Rusanov_f[d].cons_flux_function = [&](auto& cells, const Field& field)
                                           {
-                                            // Compute the stencil
-                                            const auto& left  = cells[0];
-                                            const auto& right = cells[1];
+                                            #ifdef ORDER_2
+                                              // Compute the stencil
+                                              const auto& left_left   = cells[0];
+                                              const auto& left        = cells[1];
+                                              const auto& right       = cells[2];
+                                              const auto& right_right = cells[3];
 
-                                            FluxValue<typename Flux<Field>::cfg> qL = field[left];
-                                            FluxValue<typename Flux<Field>::cfg> qR = field[right];
+                                              // MUSCL reconstruction
+                                              const FluxValue<typename Flux<Field>::cfg> primLL = this->cons2prim(field[left_left]);
+                                              const FluxValue<typename Flux<Field>::cfg> primL  = this->cons2prim(field[left]);
+                                              const FluxValue<typename Flux<Field>::cfg> primR  = this->cons2prim(field[right]);
+                                              const FluxValue<typename Flux<Field>::cfg> primRR = this->cons2prim(field[right_right]);
+
+                                              const double beta = 1.0;
+                                              auto primL_recon = primL;
+                                              auto primR_recon = primR;
+                                              for(std::size_t comp = 0; comp < Field::size; ++comp) {
+                                                if(primR(comp) - primL(comp) > 0.0) {
+                                                  primL_recon(comp) += 0.5*std::max(0.0, std::max(std::min(beta*(primL(comp) - primLL(comp)),
+                                                                                                           primR(comp) - primL(comp)),
+                                                                                                  std::min(primL(comp) - primLL(comp),
+                                                                                                           beta*(primR(comp) - primL(comp)))));
+                                                }
+                                                else if(primR(comp) - primL(comp) < 0.0) {
+                                                  primL_recon(comp) += 0.5*std::min(0.0, std::min(std::max(beta*(primL(comp) - primLL(comp)),
+                                                                                                           primR(comp) - primL(comp)),
+                                                                                                  std::max(primL(comp) - primLL(comp),
+                                                                                                           beta*(primR(comp) - primL(comp)))));
+                                                }
+
+                                                if(primRR(comp) - primR(comp) > 0.0) {
+                                                  primR_recon(comp) -= 0.5*std::max(0.0, std::max(std::min(beta*(primR(comp) - primL(comp)),
+                                                                                                           primRR(comp) - primR(comp)),
+                                                                                                  std::min(primR(comp) - primL(comp),
+                                                                                                           beta*(primRR(comp) - primR(comp)))));
+                                                }
+                                                else if(primRR(comp) - primR(comp) < 0.0) {
+                                                  primR_recon(comp) -= 0.5*std::min(0.0, std::min(std::max(beta*(primR(comp) - primL(comp)),
+                                                                                                           primRR(comp) - primR(comp)),
+                                                                                                  std::max(primR(comp) - primL(comp),
+                                                                                                           beta*(primRR(comp) - primR(comp)))));
+                                                }
+                                              }
+
+                                              const FluxValue<typename Flux<Field>::cfg> qL = this->prim2cons(primL_recon);
+                                              const FluxValue<typename Flux<Field>::cfg> qR = this->prim2cons(primR_recon);
+                                            #else
+                                              // Compute the stencil and extract state
+                                              const auto& left  = cells[0];
+                                              const auto& right = cells[1];
+
+                                              const FluxValue<typename Flux<Field>::cfg> qL = field[left];
+                                              const FluxValue<typename Flux<Field>::cfg> qR = field[right];
+                                            #endif
 
                                             // Compute the numerical flux
                                             return compute_discrete_flux(qL, qR, d,
@@ -362,6 +455,9 @@ namespace samurai {
                 const double eps_,
                 const double mod_grad_alpha1_bar_min_); // Constructor which accepts in inputs the equations of state of the two phases
 
+    auto make_two_scale_capillarity(const auto& grad_alpha1_bar); // Compute the flux over all cells
+
+  private:
     FluxValue<typename Flux<Field>::cfg> compute_discrete_flux(const FluxValue<typename Flux<Field>::cfg>& qL,
                                                                const FluxValue<typename Flux<Field>::cfg>& qR,
                                                                const std::size_t curr_d,
@@ -369,9 +465,6 @@ namespace samurai {
                                                                const auto& grad_alpha1_barR,
                                                                const bool is_discontinuous); // Godunov flux for the along direction curr_d
 
-    auto make_two_scale_capillarity(const auto& grad_alpha1_bar); // Compute the flux over all cells
-
-  private:
     void solve_p_star(const auto& qL, const auto& qR,
                       const double dvel_d, const double vel_d_L,
                       const double p0_L, const double p0_R, double& p_star); // Newton method to compute p* in the exact solver for the hyperbolic part
@@ -790,12 +883,60 @@ namespace samurai {
         // Compute now the "discrete" flux function, in this case a Rusanov flux
         Godunov_f[d].cons_flux_function = [&](auto& cells, const Field& field)
                                           {
-                                            // Compute the stencil
-                                            const auto& left  = cells[0];
-                                            const auto& right = cells[1];
+                                            #ifdef ORDER_2
+                                              // Compute the stencil
+                                              const auto& left_left   = cells[0];
+                                              const auto& left        = cells[1];
+                                              const auto& right       = cells[2];
+                                              const auto& right_right = cells[3];
 
-                                            FluxValue<typename Flux<Field>::cfg> qL = field[left];
-                                            FluxValue<typename Flux<Field>::cfg> qR = field[right];
+                                              // MUSCL reconstruction
+                                              const FluxValue<typename Flux<Field>::cfg> primLL = this->cons2prim(field[left_left]);
+                                              const FluxValue<typename Flux<Field>::cfg> primL  = this->cons2prim(field[left]);
+                                              const FluxValue<typename Flux<Field>::cfg> primR  = this->cons2prim(field[right]);
+                                              const FluxValue<typename Flux<Field>::cfg> primRR = this->cons2prim(field[right_right]);
+
+                                              const double beta = 1.0;
+                                              auto primL_recon = primL;
+                                              auto primR_recon = primR;
+                                              for(std::size_t comp = 0; comp < Field::size; ++comp) {
+                                                if(primR(comp) - primL(comp) > 0.0) {
+                                                  primL_recon(comp) += 0.5*std::max(0.0, std::max(std::min(beta*(primL(comp) - primLL(comp)),
+                                                                                                           primR(comp) - primL(comp)),
+                                                                                                  std::min(primL(comp) - primLL(comp),
+                                                                                                           beta*(primR(comp) - primL(comp)))));
+                                                }
+                                                else if(primR(comp) - primL(comp) < 0.0) {
+                                                  primL_recon(comp) += 0.5*std::min(0.0, std::min(std::max(beta*(primL(comp) - primLL(comp)),
+                                                                                                           primR(comp) - primL(comp)),
+                                                                                                  std::max(primL(comp) - primLL(comp),
+                                                                                                           beta*(primR(comp) - primL(comp)))));
+                                                }
+
+                                                if(primRR(comp) - primR(comp) > 0.0) {
+                                                  primR_recon(comp) -= 0.5*std::max(0.0, std::max(std::min(beta*(primR(comp) - primL(comp)),
+                                                                                                           primRR(comp) - primR(comp)),
+                                                                                                  std::min(primR(comp) - primL(comp),
+                                                                                                           beta*(primRR(comp) - primR(comp)))));
+                                                }
+                                                else if(primRR(comp) - primR(comp) < 0.0) {
+                                                  primR_recon(comp) -= 0.5*std::min(0.0, std::min(std::max(beta*(primR(comp) - primL(comp)),
+                                                                                                           primRR(comp) - primR(comp)),
+                                                                                                  std::max(primR(comp) - primL(comp),
+                                                                                                           beta*(primRR(comp) - primR(comp)))));
+                                                }
+                                              }
+
+                                              const FluxValue<typename Flux<Field>::cfg> qL = this->prim2cons(primL_recon);
+                                              const FluxValue<typename Flux<Field>::cfg> qR = this->prim2cons(primR_recon);
+                                            #else
+                                              // Compute the stencil and extract state
+                                              const auto& left  = cells[0];
+                                              const auto& right = cells[1];
+
+                                              const FluxValue<typename Flux<Field>::cfg> qL = field[left];
+                                              const FluxValue<typename Flux<Field>::cfg> qR = field[right];
+                                            #endif
 
                                             // Check if we are at a cell with discontinuity in the state. This is not sufficient to say that the
                                             // flux is equal to the 'continuous' one because of surface tension, which involves gradients,
