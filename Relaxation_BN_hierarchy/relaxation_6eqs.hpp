@@ -201,29 +201,29 @@ void Relaxation<dim>::init_variables() {
   const double xd = 0.6;
 
   // Initialize the fields with a loop over all cells
-  const double alpha1L = 0.5954;
+  const double alpha1L = 1.0 - 1e-2;
 
-  const double velL    = 0.0;
+  const double velL    = -2.0;
 
-  const double p1L     = 2e11;
-  const double rho1L   = 1185.0;
+  const double p1L     = 1e5;
+  const double rho1L   = 1150.0;
 
   const double alpha2L = 1.0 - alpha1L;
 
-  const double p2L     = 2e11;
-  const double rho2L   = 3622.0;
+  const double p2L     = 1e5;
+  const double rho2L   = 0.63;
 
   const double alpha1R = alpha1L;
 
-  const double velR    = 0.0;
+  const double velR    = 2.0;
 
   const double p1R     = 1e5;
-  const double rho1R   = 1185.0;
+  const double rho1R   = 1150.0;
 
   const double alpha2R = 1.0 - alpha1R;
 
   const double p2R     = 1e5;
-  const double rho2R   = 3622.0;
+  const double rho2R   = 0.63;
 
   samurai::for_each_cell(mesh,
                          [&](const auto& cell)
