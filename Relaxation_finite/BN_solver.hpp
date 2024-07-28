@@ -108,36 +108,25 @@ private:
 
 // Implement class constructor
 //
-#ifdef SULICIU_RELAXATION
-  template<std::size_t dim>
-  BN_Solver<dim>::BN_Solver(const xt::xtensor_fixed<double, xt::xshape<dim>>& min_corner,
-                            const xt::xtensor_fixed<double, xt::xshape<dim>>& max_corner,
-                            std::size_t min_level, std::size_t max_level,
-                            double Tf_, double cfl_, std::size_t nfiles_):
-    box(min_corner, max_corner), mesh(box, min_level, max_level, {false, true}),
-    Tf(Tf_), cfl(cfl_), nfiles(nfiles_),
-    EOS_phase1(EquationData::gamma_1, EquationData::pi_infty_1, EquationData::q_infty_1),
-    EOS_phase2(EquationData::gamma_2, EquationData::pi_infty_2, EquationData::q_infty_2),
-    numerical_flux(EOS_phase1, EOS_phase2) {
-    init_variables();
-  }
-#elifdef RUSANOV_FLUX
-  template<std::size_t dim>
-  BN_Solver<dim>::BN_Solver(const xt::xtensor_fixed<double, xt::xshape<dim>>& min_corner,
-                            const xt::xtensor_fixed<double, xt::xshape<dim>>& max_corner,
-                            std::size_t min_level, std::size_t max_level,
-                            double Tf_, double cfl_, std::size_t nfiles_):
-    box(min_corner, max_corner), mesh(box, min_level, max_level, {false, true}),
-    Tf(Tf_), cfl(cfl_), nfiles(nfiles_),
-    EOS_phase1(EquationData::gamma_1, EquationData::pi_infty_1, EquationData::q_infty_1),
-    EOS_phase2(EquationData::gamma_2, EquationData::pi_infty_2, EquationData::q_infty_2),
+template<std::size_t dim>
+BN_Solver<dim>::BN_Solver(const xt::xtensor_fixed<double, xt::xshape<dim>>& min_corner,
+                          const xt::xtensor_fixed<double, xt::xshape<dim>>& max_corner,
+                          std::size_t min_level, std::size_t max_level,
+                          double Tf_, double cfl_, std::size_t nfiles_):
+  box(min_corner, max_corner), mesh(box, min_level, max_level, {false, true}),
+  Tf(Tf_), cfl(cfl_), nfiles(nfiles_),
+  EOS_phase1(EquationData::gamma_1, EquationData::pi_infty_1, EquationData::q_infty_1),
+  EOS_phase2(EquationData::gamma_2, EquationData::pi_infty_2, EquationData::q_infty_2),
+  #ifdef SULICIU_RELAXATION
+    numerical_flux(EOS_phase1, EOS_phase2)
+  #elifdef RUSANOV_FLUX
     numerical_flux_cons(EOS_phase1, EOS_phase2),
-    numerical_flux_non_cons(EOS_phase1, EOS_phase2) {
+    numerical_flux_non_cons(EOS_phase1, EOS_phase2)
+  #endif
+  {
     init_variables();
   }
-#endif
-
-
+#
 // Initialization of conserved and auxiliary variables
 //
 template<std::size_t dim>
@@ -229,7 +218,6 @@ void BN_Solver<dim>::init_variables() {
   samurai::make_bc<samurai::Neumann<1>>(conserved_variables, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
 }
 
-
 // Compute the estimate of the maximum eigenvalue for CFL condition
 //
 #ifdef RUSANOV_FLUX
@@ -251,7 +239,6 @@ void BN_Solver<dim>::init_variables() {
   }
 #endif
 
-
 // Update auxiliary fields after solution of the system
 //
 template<std::size_t dim>
@@ -260,22 +247,24 @@ void BN_Solver<dim>::update_auxiliary_fields() {
                          [&](const auto& cell)
                          {
                            // Resize fields because of multiresolution
-                           rho.resize();
-                           p.resize();
+                           #if !defined(ORDER_2)
+                             rho.resize();
+                             p.resize();
 
-                           rho1.resize();
-                           p1.resize();
-                           c1.resize();
-                           vel1.resize();
+                             rho1.resize();
+                             p1.resize();
+                             c1.resize();
+                             vel1.resize();
 
-                           rho2.resize();
-                           p2.resize();
-                           c2.resize();
-                           vel2.resize();
+                             rho2.resize();
+                             p2.resize();
+                             c2.resize();
+                             vel2.resize();
+                           #endif
 
                            // Compute the fields
                            rho[cell] = conserved_variables[cell][ALPHA1_RHO1_INDEX]
-                                      + conserved_variables[cell][ALPHA2_RHO2_INDEX];
+                                     + conserved_variables[cell][ALPHA2_RHO2_INDEX];
 
                            rho1[cell] = conserved_variables[cell][ALPHA1_RHO1_INDEX]/
                                         conserved_variables[cell][ALPHA1_INDEX]; /*--- TODO: Add treatment for vanishing volume fraction ---*/
@@ -309,7 +298,6 @@ void BN_Solver<dim>::update_auxiliary_fields() {
                                    + (1.0 - conserved_variables[cell][ALPHA1_INDEX])*p2[cell];
                          });
 }
-
 
 // Save desired fields and info
 //
@@ -348,7 +336,17 @@ void BN_Solver<dim>::run() {
   #endif
   const double dt_save = Tf/static_cast<double>(nfiles);
 
+  #ifdef ORDER_2
+    filename = filename + "_order2";
+  #else
+    filename = filename + "_order1";
+  #endif
+
   // Auxiliary variables to save updated fields
+  #ifdef ORDER_2
+    auto conserved_variables_tmp   = samurai::make_field<double, EquationData::NVARS>("conserved_tmp", mesh);
+    auto conserved_variables_tmp_2 = samurai::make_field<double, EquationData::NVARS>("conserved_tmp_2", mesh);
+  #endif
   auto conserved_variables_np1 = samurai::make_field<double, EquationData::NVARS>("conserved_np1", mesh);
 
   // Create the flux variables
@@ -374,9 +372,11 @@ void BN_Solver<dim>::run() {
   double t          = 0.0;
   while(t != Tf) {
     /*--- Apply mesh adaptation ---*/
-    samurai::update_ghost_mr(conserved_variables);
-    auto MRadaptation = samurai::make_MRAdapt(conserved_variables);
-    MRadaptation(1e-2, 1);
+    #if !defined(ORDER_2)
+      samurai::update_ghost_mr(conserved_variables);
+      auto MRadaptation = samurai::make_MRAdapt(conserved_variables);
+      MRadaptation(1e-2, 1);
+    #endif
 
     /*--- Apply the numerical scheme ---*/
     samurai::update_ghost_mr(conserved_variables);
@@ -387,8 +387,15 @@ void BN_Solver<dim>::run() {
       const double dt = std::min(Tf - t, cfl*dx/c);
       t += dt;
       std::cout << fmt::format("Iteration {}: t = {}, dt = {}", ++nt, t, dt) << std::endl;
-      conserved_variables_np1.resize();
-      conserved_variables_np1 = conserved_variables - dt*Relaxation_Flux;
+      #ifdef ORDER_2
+        //conserved_variables_tmp.resize();
+        conserved_variables_tmp = conserved_variables - dt*Relaxation_Flux;
+        std::swap(conserved_variables.array(), conserved_variables_tmp.array());
+      #else
+        conserved_variables_np1.resize();
+        conserved_variables_np1 = conserved_variables - dt*Relaxation_Flux;
+        std::swap(conserved_variables.array(), conserved_variables_np1.array());
+      #endif
     #elifdef RUSANOV_FLUX
       auto Cons_Flux    = Rusanov_flux(conserved_variables);
       auto NonCons_Flux = NonConservative_flux(conserved_variables);
@@ -398,13 +405,38 @@ void BN_Solver<dim>::run() {
       const double dt = std::min(Tf - t, cfl*dx/get_max_lambda());
       t += dt;
       std::cout << fmt::format("Iteration {}: t = {}, dt = {}", ++nt, t, dt) << std::endl;
-      conserved_variables_np1.resize();
-      conserved_variables_np1 = conserved_variables - dt*Cons_Flux - dt*NonCons_Flux;
+      #ifdef ORDER_2
+        //conserved_variables_tmp.resize();
+        conserved_variables_tmp = conserved_variables - dt*Cons_Flux - dt*NonCons_Flux;
+        std::swap(conserved_variables.array(), conserved_variables_tmp.array());
+      #else
+        conserved_variables_np1.resize();
+        conserved_variables_np1 = conserved_variables - dt*Cons_Flux - dt*NonCons_Flux;
+        std::swap(conserved_variables.array(), conserved_variables_np1.array());
+      #endif
     #endif
 
-    std::swap(conserved_variables.array(), conserved_variables_np1.array());
+    /*--- Consider the second stage for the second order ---*/
+    #ifdef ORDER_2
+      samurai::update_ghost_mr(conserved_variables);
+      samurai::update_bc(conserved_variables);
+      #ifdef SULICIU_RELAXATION
+        c = 0.0;
+        Relaxation_Flux = Suliciu_flux(conserved_variables);
+        //conserved_variables_tmp_2.resize();
+        conserved_variables_tmp_2 = conserved_variables - dt*Relaxation_Flux;
+      #elifdef RUSANOV_FLUX
+        Cons_Flux    = Rusanov_flux(conserved_variables);
+        NonCons_Flux = NonConservative_flux(conserved_variables);
+        //conserved_variables_tmp_2.resize();
+        conserved_variables_tmp_2 = conserved_variables - dt*Cons_Flux - dt*NonCons_Flux;
+        conserved_variables_np1   = 0.5*(conserved_variables_tmp + conserved_variables_tmp_2);
+      #endif
+      conserved_variables_np1 = 0.5*(conserved_variables_tmp + conserved_variables_tmp_2);
+      std::swap(conserved_variables.array(), conserved_variables_np1.array());
+    #endif
 
-    // Save the results
+    /*--- Save the results ---*/
     if(t >= static_cast<double>(nsave + 1) * dt_save || t == Tf) {
       update_auxiliary_fields();
 
