@@ -28,7 +28,7 @@ using namespace EquationData;
 template<std::size_t dim>
 class BN_Solver {
 public:
-  using Config = samurai::MRConfig<dim>;
+  using Config = samurai::MRConfig<dim, 2>;
 
   BN_Solver() = default; // Default constructor. This will do nothing
                          // and basically will never be used
@@ -148,6 +148,7 @@ void BN_Solver<dim>::init_variables() {
   vel1 = samurai::make_field<double, dim>("vel1", mesh);
   vel2 = samurai::make_field<double, dim>("vel2", mesh);
 
+  /*--- Set the initial state ---*/
   const double xd = 0.0;
 
   // Initialize the fields with a loop over all cells
@@ -306,19 +307,17 @@ void BN_Solver<dim>::save(const fs::path& path,
   samurai::save(path, fmt::format("{}{}", filename, suffix), mesh, fields..., level_);
 }
 
-
 // Implement the function that effectively performs the temporal loop
 //
 template<std::size_t dim>
 void BN_Solver<dim>::run() {
-  // Default output arguemnts
+  /*--- Default output arguemnts ---*/
   fs::path path = fs::current_path();
   #ifdef SULICIU_RELAXATION
     std::string filename = "Relaxation_Suliciu";
   #elifdef RUSANOV_FLUX
     std::string filename = "Rusanov_Flux";
   #endif
-  const double dt_save = Tf/static_cast<double>(nfiles);
 
   #ifdef ORDER_2
     filename = filename + "_order2";
@@ -326,14 +325,16 @@ void BN_Solver<dim>::run() {
     filename = filename + "_order1";
   #endif
 
-  // Auxiliary variables to save updated fields
+  const double dt_save = Tf/static_cast<double>(nfiles);
+
+  /*--- Auxiliary variables to save updated fields ---*/
   #ifdef ORDER_2
     auto conserved_variables_tmp   = samurai::make_field<double, EquationData::NVARS>("conserved_tmp", mesh);
     auto conserved_variables_tmp_2 = samurai::make_field<double, EquationData::NVARS>("conserved_tmp_2", mesh);
   #endif
   auto conserved_variables_np1 = samurai::make_field<double, EquationData::NVARS>("conserved_np1", mesh);
 
-  // Create the flux variables
+  /*--- Create the flux variables ---*/
   #ifdef SULICIU_RELAXATION
     double c = 0.0;
     auto Suliciu_flux = numerical_flux.make_flux(c);
@@ -342,27 +343,27 @@ void BN_Solver<dim>::run() {
     auto NonConservative_flux = numerical_flux_non_cons.make_flux();
   #endif
 
-  // Save the initial condition
+  /*--- Save the initial condition ---*/
   const std::string suffix_init = (nfiles != 1) ? "_ite_0" : "";
   save(path, filename, suffix_init, conserved_variables, rho, p, vel1, rho1, p1, c1, vel2, rho2, p2, c2);
 
-  // Set mesh size
+  /*--- Set mesh size ---*/
   using mesh_id_t = typename decltype(mesh)::mesh_id_t;
   const double dx = samurai::cell_length(mesh[mesh_id_t::cells].max_level());
 
-  // Start the loop
+  /*--- Start the loop ---*/
   std::size_t nsave = 0;
   std::size_t nt    = 0;
   double t          = 0.0;
   while(t != Tf) {
-    /*--- Apply mesh adaptation ---*/
+    // Apply mesh adaptation
     #if !defined(ORDER_2)
       samurai::update_ghost_mr(conserved_variables);
       auto MRadaptation = samurai::make_MRAdapt(conserved_variables);
       MRadaptation(1e-2, 1);
     #endif
 
-    /*--- Apply the numerical scheme ---*/
+    // Apply the numerical scheme
     samurai::update_ghost_mr(conserved_variables);
     samurai::update_bc(conserved_variables);
     #ifdef SULICIU_RELAXATION
@@ -371,14 +372,13 @@ void BN_Solver<dim>::run() {
       const double dt = std::min(Tf - t, cfl*dx/c);
       t += dt;
       std::cout << fmt::format("Iteration {}: t = {}, dt = {}", ++nt, t, dt) << std::endl;
+
       #ifdef ORDER_2
         //conserved_variables_tmp.resize();
         conserved_variables_tmp = conserved_variables - dt*Relaxation_Flux;
-        std::swap(conserved_variables.array(), conserved_variables_tmp.array());
       #else
         conserved_variables_np1.resize();
         conserved_variables_np1 = conserved_variables - dt*Relaxation_Flux;
-        std::swap(conserved_variables.array(), conserved_variables_np1.array());
       #endif
     #elifdef RUSANOV_FLUX
       auto Cons_Flux    = Rusanov_flux(conserved_variables);
@@ -389,38 +389,44 @@ void BN_Solver<dim>::run() {
       const double dt = std::min(Tf - t, cfl*dx/get_max_lambda());
       t += dt;
       std::cout << fmt::format("Iteration {}: t = {}, dt = {}", ++nt, t, dt) << std::endl;
+
       #ifdef ORDER_2
         //conserved_variables_tmp.resize();
         conserved_variables_tmp = conserved_variables - dt*Cons_Flux - dt*NonCons_Flux;
-        std::swap(conserved_variables.array(), conserved_variables_tmp.array());
       #else
         conserved_variables_np1.resize();
         conserved_variables_np1 = conserved_variables - dt*Cons_Flux - dt*NonCons_Flux;
-        std::swap(conserved_variables.array(), conserved_variables_np1.array());
       #endif
     #endif
 
-    /*--- Consider the second stage for the second order ---*/
+    #ifdef ORDER_2
+      std::swap(conserved_variables.array(), conserved_variables_tmp.array());
+    #else
+      std::swap(conserved_variables.array(), conserved_variables_np1.array());
+    #endif
+
+    // Consider the second stage for the second order
     #ifdef ORDER_2
       samurai::update_ghost_mr(conserved_variables);
       samurai::update_bc(conserved_variables);
       #ifdef SULICIU_RELAXATION
         c = 0.0;
         Relaxation_Flux = Suliciu_flux(conserved_variables);
+
         //conserved_variables_tmp_2.resize();
         conserved_variables_tmp_2 = conserved_variables - dt*Relaxation_Flux;
       #elifdef RUSANOV_FLUX
         Cons_Flux    = Rusanov_flux(conserved_variables);
         NonCons_Flux = NonConservative_flux(conserved_variables);
+
         //conserved_variables_tmp_2.resize();
         conserved_variables_tmp_2 = conserved_variables - dt*Cons_Flux - dt*NonCons_Flux;
-        conserved_variables_np1   = 0.5*(conserved_variables_tmp + conserved_variables_tmp_2);
       #endif
       conserved_variables_np1 = 0.5*(conserved_variables_tmp + conserved_variables_tmp_2);
       std::swap(conserved_variables.array(), conserved_variables_np1.array());
     #endif
 
-    /*--- Save the results ---*/
+    // Save the results
     if(t >= static_cast<double>(nsave + 1) * dt_save || t == Tf) {
       update_auxiliary_fields();
 

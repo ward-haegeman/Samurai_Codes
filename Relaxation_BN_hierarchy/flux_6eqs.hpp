@@ -137,7 +137,7 @@ namespace samurai {
   private:
     FluxValue<typename Flux<Field>::cfg> compute_discrete_flux(const FluxValue<typename Flux<Field>::cfg>& qL,
                                                                const FluxValue<typename Flux<Field>::cfg>& qR,
-                                                               const std::size_t curr_d) const; // Rusanov flux along direction d
+                                                               const std::size_t curr_d); // Rusanov flux along direction d
   };
 
   // Constructor derived from base class
@@ -150,7 +150,7 @@ namespace samurai {
   template<class Field>
   FluxValue<typename Flux<Field>::cfg> RusanovFlux<Field>::compute_discrete_flux(const FluxValue<typename Flux<Field>::cfg>& qL,
                                                                                  const FluxValue<typename Flux<Field>::cfg>& qR,
-                                                                                 std::size_t curr_d) const {
+                                                                                 std::size_t curr_d) {
     /*--- Save mixture density and velocity current direction left state ---*/
     const auto rhoL   = qL(ALPHA1_RHO1_INDEX) + qL(ALPHA2_RHO2_INDEX);
     const auto velL_d = qL(RHO_U_INDEX + curr_d)/rhoL;
@@ -268,8 +268,8 @@ namespace samurai {
                                                   const auto& left  = cells[0];
                                                   const auto& right = cells[1];
 
-                                                  FluxValue<typename Flux<Field>::cfg> qL = field[left];
-                                                  FluxValue<typename Flux<Field>::cfg> qR = field[right];
+                                                  const FluxValue<typename Flux<Field>::cfg>& qL = field[left];
+                                                  const FluxValue<typename Flux<Field>::cfg>& qR = field[right];
                                                 #endif
 
                                                 return compute_discrete_flux(qL, qR, d);
@@ -296,7 +296,7 @@ namespace samurai {
                                const FluxValue<typename Flux<Field>::cfg>& qR,
                                const std::size_t curr_d,
                                FluxValue<typename Flux<Field>::cfg>& F_minus,
-                               FluxValue<typename Flux<Field>::cfg>& F_plus) const; // Non-conservative flux
+                               FluxValue<typename Flux<Field>::cfg>& F_plus); // Non-conservative flux
   };
 
   // Constructor derived from base class
@@ -311,7 +311,7 @@ namespace samurai {
                                                          const FluxValue<typename Flux<Field>::cfg>& qR,
                                                          const std::size_t curr_d,
                                                          FluxValue<typename Flux<Field>::cfg>& F_minus,
-                                                         FluxValue<typename Flux<Field>::cfg>& F_plus) const {
+                                                         FluxValue<typename Flux<Field>::cfg>& F_plus) {
     /*--- Zero contribution from continuity and momentum equations ---*/
     F_minus(ALPHA1_RHO1_INDEX) = 0.0;
     F_plus(ALPHA1_RHO1_INDEX)  = 0.0;
@@ -448,8 +448,8 @@ namespace samurai {
                                                 const auto& left  = cells[0];
                                                 const auto& right = cells[1];
 
-                                                FluxValue<typename Flux<Field>::cfg> qL = field[left];
-                                                FluxValue<typename Flux<Field>::cfg> qR = field[right];
+                                                const FluxValue<typename Flux<Field>::cfg>& qL = field[left];
+                                                const FluxValue<typename Flux<Field>::cfg>& qR = field[right];
                                               #endif
 
                                               FluxValue<typename Flux<Field>::cfg> F_minus,
@@ -490,14 +490,14 @@ namespace samurai {
       void compute_high_order_contribution(const FluxValue<typename Flux<Field>::cfg>& qLL,
                                            const FluxValue<typename Flux<Field>::cfg>& qL,
                                            const std::size_t curr_d,
-                                           FluxValue<typename Flux<Field>::cfg>& H_minus) const; // High-order contribution for the wave propagation formalism
+                                           FluxValue<typename Flux<Field>::cfg>& H_minus); // High-order contribution for the wave propagation formalism
     #endif
 
     void compute_discrete_flux(const FluxValue<typename Flux<Field>::cfg>& qL,
                                const FluxValue<typename Flux<Field>::cfg>& qR,
                                const std::size_t curr_d,
                                FluxValue<typename Flux<Field>::cfg>& H_minus,
-                               FluxValue<typename Flux<Field>::cfg>& H_plus) const; // Compute the flux in a 'non-conservative' fashion (wave propagation formalism)
+                               FluxValue<typename Flux<Field>::cfg>& H_plus); // Compute the flux in a 'non-conservative' fashion (wave propagation formalism)
   };
 
   // Constructor derived from base class
@@ -562,7 +562,7 @@ namespace samurai {
                                               const FluxValue<typename Flux<Field>::cfg>& qR,
                                               const std::size_t curr_d,
                                               FluxValue<typename Flux<Field>::cfg>& H_minus,
-                                              FluxValue<typename Flux<Field>::cfg>& H_plus) const {
+                                              FluxValue<typename Flux<Field>::cfg>& H_plus) {
     /*--- Compute useful quantites to construct our flux ---*/
 
     // Save mixture density and velocity current direction left state
@@ -661,7 +661,7 @@ namespace samurai {
   void HLLCFlux<Field>::compute_high_order_contribution(const FluxValue<typename Flux<Field>::cfg>& qLL,
                                                         const FluxValue<typename Flux<Field>::cfg>& qL,
                                                         const std::size_t curr_d,
-                                                        FluxValue<typename Flux<Field>::cfg>& H_minus) const {
+                                                        FluxValue<typename Flux<Field>::cfg>& H_minus) {
     /*--- Compute useful quantites to construct our flux ---*/
 
     // Save mixture density and velocity current direction left state (w.r.t cell)
@@ -811,8 +811,8 @@ namespace samurai {
                                              const auto& left  = cells[0];
                                              const auto& right = cells[1];
 
-                                             FluxValue<typename Flux<Field>::cfg> qL = field[left];
-                                             FluxValue<typename Flux<Field>::cfg> qR = field[right];
+                                             const FluxValue<typename Flux<Field>::cfg>& qL = field[left];
+                                             const FluxValue<typename Flux<Field>::cfg>& qR = field[right];
                                            #endif
 
                                            FluxValue<typename Flux<Field>::cfg> H_minus,
@@ -822,7 +822,7 @@ namespace samurai {
 
                                            #ifdef ORDER_2
                                              compute_high_order_contribution(qLL, qL, d, H_minus);
-                                            #endif
+                                           #endif
 
                                            samurai::FluxValuePair<typename Flux<Field>::cfg> flux;
                                            flux[0] = H_minus;
@@ -855,7 +855,7 @@ namespace samurai {
 
     FluxValue<typename Flux<Field>::cfg> compute_discrete_flux(const FluxValue<typename Flux<Field>::cfg>& qL,
                                                                const FluxValue<typename Flux<Field>::cfg>& qR,
-                                                               const std::size_t curr_d) const; // Compute the flux just for the conservative part
+                                                               const std::size_t curr_d); // Compute the flux just for the conservative part
   };
 
   // Constructor derived from base class
@@ -918,7 +918,7 @@ namespace samurai {
   template<class Field>
   FluxValue<typename Flux<Field>::cfg> HLLCFlux_Conservative<Field>::compute_discrete_flux(const FluxValue<typename Flux<Field>::cfg>& qL,
                                                                                            const FluxValue<typename Flux<Field>::cfg>& qR,
-                                                                                           const std::size_t curr_d) const {
+                                                                                           const std::size_t curr_d) {
     /*--- Compute useful quantites to construct our flux ---*/
 
     // Save mixture density and velocity current direction left state
