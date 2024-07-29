@@ -24,8 +24,8 @@ int main(int argc, char* argv[]) {
   std::size_t max_level = 12;
 
   /*--- Simulation parameters ---*/
-  double Tf  = 3.2e-3;
-  double cfl = 0.5;
+  double Tf  = 2.4e-4;
+  double cfl = 0.45;
 
   /*--- Output parameters ---*/
   std::size_t nfiles = 10;

@@ -206,32 +206,32 @@ void Relaxation<dim>::init_variables() {
   de2    = samurai::make_field<double, 1>("de2", mesh);
 
   /*--- Set the initial state ---*/
-  const double xd = 0.5;
+  const double xd = 0.75;
 
   // Initialize the fields with a loop over all cells
-  const double alpha1L = 1.0 - 1e-2;
+  const double alpha1L = 1.0 - 1e-6;
 
-  const double vel1L   = -2.0;
-  const double p1L     = 1e5;
-  const double rho1L   = 1150.0;
+  const double vel1L   = 0.0;
+  const double p1L     = 1e9;
+  const double rho1L   = 1000.0;
 
   const double alpha2L = 1.0 - alpha1L;
 
-  const double vel2L   = -2.0;
-  const double p2L     = 1e5;
-  const double rho2L   = 0.63;
+  const double vel2L   = 0.0;
+  const double p2L     = 1e9;
+  const double rho2L   = 1.0;
 
-  const double alpha1R = alpha1L;
+  const double alpha1R = 1.0 - alpha1L;
 
-  const double vel1R   = 2.0;
+  const double vel1R   = 0.0;
   const double p1R     = 1e5;
-  const double rho1R   = 1150.0;
+  const double rho1R   = 1000.0;
 
   const double alpha2R = 1.0 - alpha1R;
 
-  const double vel2R   = 2.0;
+  const double vel2R   = 0.0;
   const double p2R     = 1e5;
-  const double rho2R   = 0.63;
+  const double rho2R   = 1.0;
 
   samurai::for_each_cell(mesh,
                          [&](const auto& cell)
@@ -428,10 +428,10 @@ void Relaxation<dim>::apply_instantaneous_pressure_relaxation() {
                             /*--- Take interface pressure equal to the liquid one (for the moment) ---*/
                             auto pres1 = p1[cell];
                             auto pres2 = p2[cell];
-                            auto& pI   = pres1;
+                            auto& pI   = pres2;
 
-                            const auto Laplace_cst_1 = (pres1 + EquationData::pi_infty_1)/
-                                                       std::pow(arho1_0/conserved_variables[cell][ALPHA1_INDEX], EquationData::gamma_1);
+                            //const auto Laplace_cst_1 = (pres1 + EquationData::pi_infty_1)/
+                            //                           std::pow(arho1_0/conserved_variables[cell][ALPHA1_INDEX], EquationData::gamma_1);
                             //const auto Laplace_cst_2 = (pres2 + EquationData::pi_infty_2)/
                             //                           std::pow(arho2_0/(1.0 - conserved_variables[cell][ALPHA1_INDEX]), EquationData::gamma_2);
 
@@ -462,13 +462,13 @@ void Relaxation<dim>::apply_instantaneous_pressure_relaxation() {
                               const auto rho1 = arho1_0/conserved_variables[cell][ALPHA1_INDEX];
                               const auto rho2 = arho2_0/(1.0 - conserved_variables[cell][ALPHA1_INDEX]);
 
-                              pres1         = std::pow(rho1, EquationData::gamma_1)*Laplace_cst_1 - EquationData::pi_infty_1;
+                              /*pres1         = std::pow(rho1, EquationData::gamma_1)*Laplace_cst_1 - EquationData::pi_infty_1;
                               const auto e2 = (e_0 - Y1_0*EOS_phase1.e_value(rho1, pres1))/Y2_0;
-                              pres2         = EOS_phase2.pres_value(rho2, e2);
+                              pres2         = EOS_phase2.pres_value(rho2, e2);*/
 
-                              /*pres2         = std::pow(rho2, EquationData::gamma_2)*Laplace_cst_2 - EquationData::pi_infty_2;
+                              pres2         = std::pow(rho2, EquationData::gamma_2)*Laplace_cst_2 - EquationData::pi_infty_2;
                               const auto e1 = (e_0 - Y2_0*EOS_phase2.e_value(rho2, pres2))/Y1_0;
-                              pres1         = EOS_phase1.pres_value(rho1, e1);*/
+                              pres1         = EOS_phase1.pres_value(rho1, e1);
 
                               nite++;
                             }
