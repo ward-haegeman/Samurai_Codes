@@ -480,18 +480,18 @@ namespace samurai {
 
     auto make_flux(); // Compute the flux over all cells
 
+    #ifdef ORDER_2
+      FluxValue<typename Flux<Field>::cfg> compute_high_order_contribution(const FluxValue<typename Flux<Field>::cfg>& qLL,
+                                                                           const FluxValue<typename Flux<Field>::cfg>& qL,
+                                                                           const std::size_t curr_d = 0); // High-order contribution
+                                                                                                          // for the wave propagation formalism
+    #endif
+
   private:
     auto compute_middle_state(const FluxValue<typename Flux<Field>::cfg>& q,
                               const typename Field::value_type S,
                               const typename Field::value_type S_star,
                               const std::size_t curr_d) const; // Compute the middle state
-
-    #ifdef ORDER_2
-      void compute_high_order_contribution(const FluxValue<typename Flux<Field>::cfg>& qLL,
-                                           const FluxValue<typename Flux<Field>::cfg>& qL,
-                                           const std::size_t curr_d,
-                                           FluxValue<typename Flux<Field>::cfg>& H_minus); // High-order contribution for the wave propagation formalism
-    #endif
 
     void compute_discrete_flux(const FluxValue<typename Flux<Field>::cfg>& qL,
                                const FluxValue<typename Flux<Field>::cfg>& qR,
@@ -658,10 +658,10 @@ namespace samurai {
   //
   #ifdef ORDER_2
   template<class Field>
-  void HLLCFlux<Field>::compute_high_order_contribution(const FluxValue<typename Flux<Field>::cfg>& qLL,
-                                                        const FluxValue<typename Flux<Field>::cfg>& qL,
-                                                        const std::size_t curr_d,
-                                                        FluxValue<typename Flux<Field>::cfg>& H_minus) {
+  FluxValue<typename Flux<Field>::cfg> HLLCFlux<Field>::
+  compute_high_order_contribution(const FluxValue<typename Flux<Field>::cfg>& qLL,
+                                  const FluxValue<typename Flux<Field>::cfg>& qL,
+                                  const std::size_t curr_d) {
     /*--- Compute useful quantites to construct our flux ---*/
 
     // Save mixture density and velocity current direction left state (w.r.t cell)
@@ -731,7 +731,7 @@ namespace samurai {
     const auto q_star_L  = compute_middle_state(qL, sL, s_star, curr_d);
 
     /*--- Compute the fluctuations (wave propagation formalism) ---*/
-    H_minus += sLL*(q_star_LL - qLL) + s_star*(q_star_L - q_star_LL) + sL*(qL - q_star_L);
+    return sLL*(q_star_LL - qLL) + s_star*(q_star_L - q_star_LL) + sL*(qL - q_star_L);
   }
   #endif
 
@@ -758,9 +758,8 @@ namespace samurai {
                                              const auto& right_right    = cells[3];
 
                                              // MUSCL reconstruction
-                                             FluxValue<typename Flux<Field>::cfg> qL  = field[left];
-                                             FluxValue<typename Flux<Field>::cfg> qR  = field[right];
-                                             FluxValue<typename Flux<Field>::cfg> qLL = field[left];
+                                             FluxValue<typename Flux<Field>::cfg> qL = field[left];
+                                             FluxValue<typename Flux<Field>::cfg> qR = field[right];
 
                                              const double beta = 1.0;
                                              for(std::size_t comp = 0; comp < Field::size; ++comp) {
@@ -789,19 +788,6 @@ namespace samurai {
                                                                                         std::max(field[right](comp) - field[left](comp),
                                                                                                  beta*(field[right_right](comp) - field[right](comp)))));
                                                }
-
-                                               if(field[right](comp) - field[left](comp) > 0.0) {
-                                                 qLL(comp) -= 0.5*std::max(0.0, std::max(std::min(beta*(field[left](comp) - field[left_left](comp)),
-                                                                                                  field[right](comp) - field[left](comp)),
-                                                                                         std::min(field[left](comp) - field[left_left](comp),
-                                                                                                  beta*(field[right](comp) - field[left](comp)))));
-                                               }
-                                               else if(field[right](comp) - field[left](comp) < 0.0) {
-                                                 qLL(comp) -= 0.5*std::min(0.0, std::min(std::max(beta*(field[left](comp) - field[left_left](comp)),
-                                                                                                 field[right](comp) - field[left](comp)),
-                                                                                         std::max(field[left](comp) - field[left_left](comp),
-                                                                                                  beta*(field[right](comp) - field[left](comp)))));
-                                               }
                                              }
                                            #else
                                              // Compute the stencil and extract state
@@ -816,10 +802,6 @@ namespace samurai {
                                                                                 H_plus;
 
                                            compute_discrete_flux(qL, qR, d, H_minus, H_plus);
-
-                                           #ifdef ORDER_2
-                                             compute_high_order_contribution(qLL, qL, d, H_minus);
-                                           #endif
 
                                            samurai::FluxValuePair<typename Flux<Field>::cfg> flux;
                                            flux[0] = H_minus;

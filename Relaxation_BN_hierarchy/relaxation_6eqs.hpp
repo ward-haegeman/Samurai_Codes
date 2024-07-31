@@ -696,6 +696,48 @@ void Relaxation<dim>::run() {
 
       #ifdef ORDER_2
         conserved_variables_tmp = conserved_variables - dt*Total_Flux;
+
+        const samurai::Stencil<3, EquationData::dim> stencil = {{-1}, {0}, {1}};
+        samurai::for_each_stencil(mesh, stencil, [&](const auto& cells)
+                                                    {
+                                                      const auto& left  = cells[0];
+                                                      const auto& mid   = cells[1];
+                                                      const auto& right = cells[2];
+
+                                                      auto qLL = conserved_variables[mid];
+                                                      auto qL  = conserved_variables[mid];
+
+                                                      const double beta = 1.0;
+                                                      for(std::size_t comp = 0; comp < Field::size; ++comp) {
+                                                        if(conserved_variables[right](comp) - conserved_variables[mid](comp) > 0.0) {
+                                                          qL(comp) += 0.5*std::max(0.0, std::max(std::min(beta*(conserved_variables[mid](comp) - conserved_variables[left](comp)),
+                                                                                                          conserved_variables[right](comp) - conserved_variables[mid](comp)),
+                                                                                                 std::min(conserved_variables[mid](comp) - conserved_variables[left](comp),
+                                                                                                          beta*(conserved_variables[right](comp) - conserved_variables[mid](comp)))));
+                                                        }
+                                                        else if(conserved_variables[right](comp) - conserved_variables[mid](comp) < 0.0) {
+                                                          qL(comp) += 0.5*std::min(0.0, std::min(std::max(beta*(conserved_variables[mid](comp) - conserved_variables[left](comp)),
+                                                                                                          conserved_variables[right](comp) - conserved_variables[mid](comp)),
+                                                                                                 std::max(conserved_variables[mid](comp) - conserved_variables[left](comp),
+                                                                                                          beta*(conserved_variables[right](comp) - conserved_variables[mid](comp)))));
+                                                        }
+
+                                                        if(conserved_variables[right](comp) - conserved_variables[mid](comp) > 0.0) {
+                                                          qLL(comp) -= 0.5*std::max(0.0, std::max(std::min(beta*(conserved_variables[mid](comp) - conserved_variables[left](comp)),
+                                                                                                           conserved_variables[right](comp) - conserved_variables[mid](comp)),
+                                                                                                  std::min(conserved_variables[mid](comp) - conserved_variables[left](comp),
+                                                                                                           beta*(conserved_variables[right](comp) - conserved_variables[mid](comp)))));
+                                                        }
+                                                        else if(conserved_variables[right](comp) - conserved_variables[mid](comp) < 0.0) {
+                                                          qLL(comp) -= 0.5*std::min(0.0, std::min(std::max(beta*(conserved_variables[mid](comp) - conserved_variables[left](comp)),
+                                                                                                           conserved_variables[right](comp) - conserved_variables[mid](comp)),
+                                                                                                  std::max(conserved_variables[mid](comp) - conserved_variables[left](comp),
+                                                                                                           beta*(conserved_variables[right](comp) - conserved_variables[mid](comp)))));
+                                                        }
+                                                      }
+
+                                                      conserved_variables_tmp[mid] -= (dt/dx)*numerical_flux.compute_high_order_contribution(qLL, qL);
+                                                    });
       #else
         conserved_variables_np1 = conserved_variables - dt*Total_Flux;
       #endif
@@ -740,6 +782,47 @@ void Relaxation<dim>::run() {
         Total_Flux = HLLC_flux(conserved_variables);
 
         conserved_variables_tmp_2 = conserved_variables - dt*Total_Flux;
+        
+        samurai::for_each_stencil(mesh, stencil, [&](const auto& cells)
+                                                    {
+                                                      const auto& left  = cells[0];
+                                                      const auto& mid   = cells[1];
+                                                      const auto& right = cells[2];
+
+                                                      auto qLL = conserved_variables[mid];
+                                                      auto qL  = conserved_variables[mid];
+
+                                                      const double beta = 1.0;
+                                                      for(std::size_t comp = 0; comp < Field::size; ++comp) {
+                                                        if(conserved_variables[right](comp) - conserved_variables[mid](comp) > 0.0) {
+                                                          qL(comp) += 0.5*std::max(0.0, std::max(std::min(beta*(conserved_variables[mid](comp) - conserved_variables[left](comp)),
+                                                                                                          conserved_variables[right](comp) - conserved_variables[mid](comp)),
+                                                                                                 std::min(conserved_variables[mid](comp) - conserved_variables[left](comp),
+                                                                                                          beta*(conserved_variables[right](comp) - conserved_variables[mid](comp)))));
+                                                        }
+                                                        else if(conserved_variables[right](comp) - conserved_variables[mid](comp) < 0.0) {
+                                                          qL(comp) += 0.5*std::min(0.0, std::min(std::max(beta*(conserved_variables[mid](comp) - conserved_variables[left](comp)),
+                                                                                                          conserved_variables[right](comp) - conserved_variables[mid](comp)),
+                                                                                                 std::max(conserved_variables[mid](comp) - conserved_variables[left](comp),
+                                                                                                          beta*(conserved_variables[right](comp) - conserved_variables[mid](comp)))));
+                                                        }
+
+                                                        if(conserved_variables[right](comp) - conserved_variables[mid](comp) > 0.0) {
+                                                          qLL(comp) -= 0.5*std::max(0.0, std::max(std::min(beta*(conserved_variables[mid](comp) - conserved_variables[left](comp)),
+                                                                                                           conserved_variables[right](comp) - conserved_variables[mid](comp)),
+                                                                                                  std::min(conserved_variables[mid](comp) - conserved_variables[left](comp),
+                                                                                                           beta*(conserved_variables[right](comp) - conserved_variables[mid](comp)))));
+                                                        }
+                                                        else if(conserved_variables[right](comp) - conserved_variables[mid](comp) < 0.0) {
+                                                          qLL(comp) -= 0.5*std::min(0.0, std::min(std::max(beta*(conserved_variables[mid](comp) - conserved_variables[left](comp)),
+                                                                                                           conserved_variables[right](comp) - conserved_variables[mid](comp)),
+                                                                                                  std::max(conserved_variables[mid](comp) - conserved_variables[left](comp),
+                                                                                                           beta*(conserved_variables[right](comp) - conserved_variables[mid](comp)))));
+                                                        }
+                                                      }
+
+                                                      conserved_variables_tmp_2[mid] -= (dt/dx)*numerical_flux.compute_high_order_contribution(qLL, qL);
+                                                    });
       #elifdef HLLC_BR_FLUX
         Cons_Flux    = HLLC_Conservative_flux(conserved_variables);
         NonCons_Flux = NonConservative_flux(conserved_variables);
