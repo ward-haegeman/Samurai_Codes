@@ -48,7 +48,7 @@ namespace samurai {
     static_assert(Field::dim == EquationData::dim, "The spatial dimesions do not match");
     static constexpr std::size_t output_field_size = field_size;
     #ifdef ORDER_2
-      static constexpr std::size_t stencil_size = 6;
+      static constexpr std::size_t stencil_size = 4;
     #else
       static constexpr std::size_t stencil_size = 2;
     #endif
@@ -226,10 +226,10 @@ namespace samurai {
                                               {
                                                 #ifdef ORDER_2
                                                   // Compute the stencil
-                                                  const auto& left_left   = cells[1];
-                                                  const auto& left        = cells[2];
-                                                  const auto& right       = cells[3];
-                                                  const auto& right_right = cells[4];
+                                                  const auto& left_left   = cells[0];
+                                                  const auto& left        = cells[1];
+                                                  const auto& right       = cells[2];
+                                                  const auto& right_right = cells[3];
 
                                                   // MUSCL reconstruction
                                                   FluxValue<typename Flux<Field>::cfg> qL = field[left];
@@ -406,10 +406,10 @@ namespace samurai {
                                             {
                                               #ifdef ORDER_2
                                                 // Compute the stencil
-                                                const auto& left_left   = cells[1];
-                                                const auto& left        = cells[2];
-                                                const auto& right       = cells[3];
-                                                const auto& right_right = cells[4];
+                                                const auto& left_left   = cells[0];
+                                                const auto& left        = cells[1];
+                                                const auto& right       = cells[2];
+                                                const auto& right_right = cells[3];
 
                                                 // MUSCL reconstruction
                                                 FluxValue<typename Flux<Field>::cfg> qL = field[left];
@@ -482,8 +482,8 @@ namespace samurai {
 
   private:
     auto compute_middle_state(const FluxValue<typename Flux<Field>::cfg>& q,
-                              const auto S,
-                              const auto S_star,
+                              const typename Field::value_type S,
+                              const typename Field::value_type S_star,
                               const std::size_t curr_d) const; // Compute the middle state
 
     #ifdef ORDER_2
@@ -509,8 +509,8 @@ namespace samurai {
   //
   template<class Field>
   auto HLLCFlux<Field>::compute_middle_state(const FluxValue<typename Flux<Field>::cfg>& q,
-                                             const auto S,
-                                             const auto S_star,
+                                             const typename Field::value_type S,
+                                             const typename Field::value_type S_star,
                                              const std::size_t curr_d) const {
     /*-- Save mixture density and velocity current direction ---*/
     const auto rho   = q(ALPHA1_RHO1_INDEX) + q(ALPHA2_RHO2_INDEX);
@@ -752,16 +752,15 @@ namespace samurai {
                                          {
                                            #ifdef ORDER_2
                                              // Compute the stencil
-                                             const auto& left_left_left = cells[0];
-                                             const auto& left_left      = cells[1];
-                                             const auto& left           = cells[2];
-                                             const auto& right          = cells[3];
-                                             const auto& right_right    = cells[4];
+                                             const auto& left_left      = cells[0];
+                                             const auto& left           = cells[1];
+                                             const auto& right          = cells[2];
+                                             const auto& right_right    = cells[3];
 
                                              // MUSCL reconstruction
                                              FluxValue<typename Flux<Field>::cfg> qL  = field[left];
                                              FluxValue<typename Flux<Field>::cfg> qR  = field[right];
-                                             FluxValue<typename Flux<Field>::cfg> qLL = field[left_left];
+                                             FluxValue<typename Flux<Field>::cfg> qLL = field[left];
 
                                              const double beta = 1.0;
                                              for(std::size_t comp = 0; comp < Field::size; ++comp) {
@@ -791,19 +790,17 @@ namespace samurai {
                                                                                                  beta*(field[right_right](comp) - field[right](comp)))));
                                                }
 
-                                               // TODO: Check if I need to rebuild with the same slope of the cell
-                                               //       or if I need to to compute the reconstructed state (as done so far)
-                                               if(field[left](comp) - field[left_left](comp) > 0.0) {
-                                                 qLL(comp) -= 0.5*std::max(0.0, std::max(std::min(beta*(field[left_left](comp) - field[left_left_left](comp)),
-                                                                                                  field[left](comp) - field[left_left](comp)),
-                                                                                        std::min(field[left_left](comp) - field[left_left_left](comp),
-                                                                                                 beta*(field[left](comp) - field[left_left](comp)))));
+                                               if(field[right](comp) - field[left](comp) > 0.0) {
+                                                 qLL(comp) -= 0.5*std::max(0.0, std::max(std::min(beta*(field[left](comp) - field[left_left](comp)),
+                                                                                                  field[right](comp) - field[left](comp)),
+                                                                                         std::min(field[left](comp) - field[left_left](comp),
+                                                                                                  beta*(field[right](comp) - field[left](comp)))));
                                                }
-                                               else if(field[left](comp) - field[left_left](comp) < 0.0) {
-                                                 qLL(comp) -= 0.5*std::min(0.0, std::min(std::max(beta*(field[left_left](comp) - field[left_left_left](comp)),
-                                                                                                  field[left](comp) - field[left_left](comp)),
-                                                                                         std::max(field[left_left](comp) - field[left_left_left](comp),
-                                                                                                  beta*(field[left](comp) - field[left_left](comp)))));
+                                               else if(field[right](comp) - field[left](comp) < 0.0) {
+                                                 qLL(comp) -= 0.5*std::min(0.0, std::min(std::max(beta*(field[left](comp) - field[left_left](comp)),
+                                                                                                 field[right](comp) - field[left](comp)),
+                                                                                         std::max(field[left](comp) - field[left_left](comp),
+                                                                                                  beta*(field[right](comp) - field[left](comp)))));
                                                }
                                              }
                                            #else
@@ -849,8 +846,8 @@ namespace samurai {
 
   private:
     auto compute_middle_state(const FluxValue<typename Flux<Field>::cfg>& q,
-                              const auto S,
-                              const auto S_star,
+                              const typename Field::value_type S,
+                              const typename Field::value_type S_star,
                               const std::size_t curr_d) const; // Compute the middle state
 
     FluxValue<typename Flux<Field>::cfg> compute_discrete_flux(const FluxValue<typename Flux<Field>::cfg>& qL,
@@ -867,8 +864,8 @@ namespace samurai {
   //
   template<class Field>
   auto HLLCFlux_Conservative<Field>::compute_middle_state(const FluxValue<typename Flux<Field>::cfg>& q,
-                                                          const auto S,
-                                                          const auto S_star,
+                                                          const typename Field::value_type S,
+                                                          const typename Field::value_type S_star,
                                                           const std::size_t curr_d) const {
     /*-- Save mixture density and velocity current direction ---*/
     const auto rho   = q(ALPHA1_RHO1_INDEX) + q(ALPHA2_RHO2_INDEX);
@@ -1019,10 +1016,10 @@ namespace samurai {
                                               {
                                                 #ifdef ORDER_2
                                                   // Compute the stencil
-                                                  const auto& left_left   = cells[1];
-                                                  const auto& left        = cells[2];
-                                                  const auto& right       = cells[3];
-                                                  const auto& right_right = cells[4];
+                                                  const auto& left_left   = cells[0];
+                                                  const auto& left        = cells[1];
+                                                  const auto& right       = cells[2];
+                                                  const auto& right_right = cells[3];
 
                                                   // MUSCL reconstruction
                                                   FluxValue<typename Flux<Field>::cfg> qL = field[left];

@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 //
-#define FULL_BN
-//#define TOT_ENERGY_6EQS
+//#define FULL_BN
+#define TOT_ENERGY_6EQS
 //#define INT_ENERGY_6EQS
 
 #ifdef FULL_BN
@@ -24,8 +24,8 @@ int main(int argc, char* argv[]) {
   std::size_t max_level = 12;
 
   /*--- Simulation parameters ---*/
-  double Tf  = 2.4e-4;
-  double cfl = 0.45;
+  double Tf  = 3.2e-3;
+  double cfl = 0.5;
 
   /*--- Output parameters ---*/
   std::size_t nfiles = 10;

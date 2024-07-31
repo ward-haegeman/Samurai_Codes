@@ -198,7 +198,7 @@ void Relaxation<dim>::init_variables() {
   de2    = samurai::make_field<double, 1>("de2", mesh);
 
   /*--- Set the initial state ---*/
-  const double xd = 0.6;
+  const double xd = 0.5;
 
   // Initialize the fields with a loop over all cells
   const double alpha1L = 1.0 - 1e-2;
