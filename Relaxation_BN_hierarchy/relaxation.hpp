@@ -432,8 +432,8 @@ void Relaxation<dim>::apply_instantaneous_pressure_relaxation() {
 
                             //const auto Laplace_cst_1 = (pres1 + EquationData::pi_infty_1)/
                             //                           std::pow(arho1_0/conserved_variables[cell][ALPHA1_INDEX], EquationData::gamma_1);
-                            //const auto Laplace_cst_2 = (pres2 + EquationData::pi_infty_2)/
-                            //                           std::pow(arho2_0/(1.0 - conserved_variables[cell][ALPHA1_INDEX]), EquationData::gamma_2);
+                            const auto Laplace_cst_2 = (pres2 + EquationData::pi_infty_2)/
+                                                       std::pow(arho2_0/(1.0 - conserved_variables[cell][ALPHA1_INDEX]), EquationData::gamma_2);
 
                             /*--- Newton method to compute the new volume fraction ---*/
                             const double tol             = 1e-8;

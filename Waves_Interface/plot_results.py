@@ -22,6 +22,7 @@ def scatter_update(scatter, points):
 def line_plot(ax, x, y):
     #Plot results
     plot = ax.plot(x, y, 'k-', linewidth=1, markersize=4, alpha=0.5)[0]
+    #plt.ylim(100000.0, 110000.à)
 
     return plot
 

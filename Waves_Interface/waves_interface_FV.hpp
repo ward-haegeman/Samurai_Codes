@@ -368,14 +368,14 @@ namespace samurai {
                 const BarotropicEOS<>& EOS_phase2,
                 const double eps_); // Constructor which accepts in inputs the equations of state of the two phases
 
+    auto make_flux(); // Compute the flux over all cells
+
+  private:
     FluxValue<typename Flux<Field>::cfg> compute_discrete_flux(const FluxValue<typename Flux<Field>::cfg>& qL,
                                                                const FluxValue<typename Flux<Field>::cfg>& qR,
                                                                const std::size_t curr_d,
                                                                const bool is_discontinuous); // Godunov flux for the along direction curr_d
-
-    auto make_flux(); // Compute the flux over all cells
-
-  private:
+                                                               
     void solve_p_star(const auto& qL, const auto& qR,
                       const double dvel_d, const double vel_d_L,
                       const double p0_L, const double p0_R, double& p_star); // Newton method to compute p* in the exact solver for the hyperbolic part
