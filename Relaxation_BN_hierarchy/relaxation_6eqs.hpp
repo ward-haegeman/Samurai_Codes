@@ -120,7 +120,7 @@ private:
 
   void apply_instantaneous_pressure_relaxation(); // Apply an instantaneous pressure relaxation
 
-  void apply_instantaneous_pressure_relaxation_Saurel();
+  void apply_instantaneous_pressure_relaxation_Ward();
 };
 
 // Implement class constructor
@@ -157,8 +157,8 @@ private:
     Tf(Tf_), cfl(cfl_), nfiles(nfiles_),
     apply_pressure_relax(do_pres_relax), apply_pressure_reinit(do_pres_reinit),
     start_energy_update_phase_1(do_energy_update_phase_1), preserve_energy(do_preserve_energy),
-    EOS_phase1(EquationData::gamma_1, EquationData::pi_infty_1, EquationData::q_infty_1),
-    EOS_phase2(EquationData::gamma_2, EquationData::pi_infty_2, EquationData::q_infty_2),
+    EOS_phase1(EquationData::gamma_1, EquationData::pi_infty_1, EquationData::c_v_1, EquationData::q_infty_1),
+    EOS_phase2(EquationData::gamma_2, EquationData::pi_infty_2, EquationData::c_v_2, EquationData::q_infty_2),
     numerical_flux(EOS_phase1, EOS_phase2) {
       std::cout << "Initializing variables" << std::endl;
       std::cout << std::endl;
@@ -320,7 +320,7 @@ void Relaxation<dim>::update_pressure_before_relaxation() {
 // Apply the instantaneous relaxation for the pressure
 //
 template<std::size_t dim>
-void Relaxation<dim>::apply_instantaneous_pressure_relaxation_Saurel() {
+void Relaxation<dim>::apply_instantaneous_pressure_relaxation() {
   samurai::for_each_cell(mesh,
                          [&](const auto& cell)
                          {
@@ -435,7 +435,8 @@ void Relaxation<dim>::apply_instantaneous_pressure_relaxation_Saurel() {
 
 
 template<std::size_t dim>
-void Relaxation<dim>::apply_instantaneous_pressure_relaxation() {
+void Relaxation<dim>::apply_instantaneous_pressure_relaxation_Ward() {
+  //int Nite_max = 0;
   samurai::for_each_cell(mesh,
                          [&](const auto& cell)
                          {
@@ -465,8 +466,6 @@ void Relaxation<dim>::apply_instantaneous_pressure_relaxation() {
                             const auto gampinf_1 = EquationData::gamma_1 * EquationData::pi_infty_1;
                             const auto gampinf_2 = EquationData::gamma_2 * EquationData::pi_infty_2;
 
-                            
-
                             /*---  ----*/
                             auto alpha_1 = conserved_variables[cell][ALPHA1_INDEX];
                             auto alpha_2 = 1.0 - alpha_1;
@@ -481,7 +480,7 @@ void Relaxation<dim>::apply_instantaneous_pressure_relaxation() {
                             auto e_2 = EOS_phase2.e_value(rho_2, p_2);
 
                             /*--- for the moment p_I = p_1 ---*/
-                            auto &p_I = p_1;
+                            auto &p_I = p_2;
                             const auto Laplace_cst_1 = (p_1 + EquationData::pi_infty_1)/std::pow(rho_1,EquationData::gamma_1);
                             const auto Laplace_cst_2 = (p_2 + EquationData::pi_infty_2)/std::pow(rho_2,EquationData::gamma_2);
 
@@ -494,28 +493,27 @@ void Relaxation<dim>::apply_instantaneous_pressure_relaxation() {
                             auto dp1drho1 = 0.0;
                             auto dp2drho2  = 0.0;
                             */
+                           /*--- Just to debug the code 
+                            double p_10 = p_1;
+                            double p_20 = p_2;
+                            double alpha_10 = alpha_1;
+                            double alpha_20 = alpha_2;
+                            ---*/
 
                             int nite = 0;
                             auto alpha_max = 1.0;
                             auto alpha_min = 0.0;
 
-                            while (nite < 100 && 2.0*(alpha_max-alpha_min)/(alpha_max+alpha_min)>1e-8) {
-                              /*
-                              dp1de1 = gammaM1_1 * rho_1;
-                              dp2de2 = gammaM1_2 * rho_2;
-                              dp1drho1 = gammaM1_1 * e_1;
-                              dp1drho1 = gammaM1_2 * e_2;
-                              
-                              dalpha = (p_1 - p_2) /
-                                       (  arho1_0*dp1drho1/(alpha_1*alpha_1) + p_I*dp1de1/arho1_0
-                                        + arho2_0*dp2drho2/(alpha_2*alpha_2) + p_I*dp2de2/arho2_0 );
-                              */
+                            bool relaxed = 2.0*(alpha_max-alpha_min)/(alpha_max+alpha_min)<1e-8 || 
+                                           std::abs(p_1-p_2)/std::abs(alpha_1*p_1+alpha_2*p_2)<1e-8;
+
+                            while (nite < 100 && !relaxed) {
 
                               p_1>p_2 ? alpha_min=alpha_1 : alpha_max=alpha_1;
                               
-                              dalpha = (p_1 - p_2) /
-                                       std::abs( (p_1 + gammaM1_1*p_I + gampinf_1)/alpha_1
-                                        +(p_2 + gammaM1_2*p_I + gampinf_2)/alpha_2 );
+                              dalpha = alpha_1*alpha_2*(p_1 - p_2) /
+                                       std::abs( alpha_2*(p_1 + gammaM1_1*p_I + gampinf_1)
+                                        +        alpha_1*(p_2 + gammaM1_2*p_I + gampinf_2) );
 
                               dalpha = std::min(dalpha, 0.9*(alpha_max-alpha_1));
                               dalpha = std::max(dalpha, 0.9*(alpha_min-alpha_1));
@@ -525,26 +523,46 @@ void Relaxation<dim>::apply_instantaneous_pressure_relaxation() {
                               rho_1 = arho1_0 / alpha_1;
                               rho_2 = arho2_0 / alpha_2;
 
-                              
+                              /*
                               p_1 = std::pow(rho_1,EquationData::gamma_1)*Laplace_cst_1 - EquationData::pi_infty_1;
                               e_1 = EOS_phase1.e_value(rho_1, p_1);
                               e_2 = (e_0 - Y1_0*e_1)/Y2_0;
                               p_2 = EOS_phase2.pres_value(rho_2, e_2);
-                              /*
+                              */
                               p_2 = std::pow(rho_2,EquationData::gamma_2)*Laplace_cst_2 - EquationData::pi_infty_2;
                               e_2 = EOS_phase2.e_value(rho_2, p_2);
                               e_1 = (e_0 - Y2_0*e_2)/Y1_0;
                               p_1 = EOS_phase1.pres_value(rho_1, e_1);
-                              */
+                              
                               
                               nite += 1;
+                              relaxed = 2.0*(alpha_max-alpha_min)/(alpha_max+alpha_min)<1e-8 || 
+                                        std::abs(p_1-p_2)/std::abs(alpha_1*p_1+alpha_2*p_2)<1e-8;
                             }
+                            /*
+                            if ( nite == 100) {
+                              std::cout<<"Nombre d'iterations max atteintes"<<std::endl;
+                              std::cout<<"p_10 = "<<p_10<<std::endl;
+                              std::cout<<"p_20 = "<<p_20<<std::endl;
+                              std::cout<<"alpha_10 = "<<alpha_10<<std::endl;
+                              std::cout<<"alpha_20 = "<<alpha_20<<std::endl;
+                              std::cout<<"p_1 = "<<p_1<<std::endl;
+                              std::cout<<"p_2 = "<<p_2<<std::endl;
+                              std::cout<<"alpha_1 = "<<alpha_1<<std::endl;
+                              std::cout<<"alpha_2 = "<<alpha_2<<std::endl;
+                              std::cout<<"alpha_min = "<<alpha_min<<std::endl;
+                              std::cout<<"alpha_max = "<<alpha_max<<std::endl;
+                              exit(0);
+                            }
+                            Nite_max = std::max(Nite_max, nite);
+                            */
                             
                             /*--- Update the conserved variables : Alpha, AlphaRhoE_1, AlphaRhoE_2 ---*/
                             conserved_variables[cell][ALPHA1_INDEX] = alpha_1;
                             conserved_variables[cell][ALPHA1_RHO1_E1_INDEX] = arho1_0*(e_1 + 0.5*vel_squared);
                             conserved_variables[cell][ALPHA2_RHO2_E2_INDEX] = rhoE_0 - conserved_variables[cell][ALPHA1_RHO1_E1_INDEX];
                           });
+                          //std::cout<<"N ite max relax P = "<<Nite_max<<std::endl;
 }
 
 

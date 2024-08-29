@@ -140,8 +140,8 @@ private:
     apply_velocity_relax(do_vel_relax), apply_pressure_relax(do_pres_relax),
     apply_pressure_reinit(do_pres_reinit), start_energy_update_phase_1(do_energy_update_phase_1),
     preserve_energy(do_preserve_energy),
-    EOS_phase1(EquationData::gamma_1, EquationData::pi_infty_1, EquationData::q_infty_1),
-    EOS_phase2(EquationData::gamma_2, EquationData::pi_infty_2, EquationData::q_infty_2),
+    EOS_phase1(EquationData::gamma_1, EquationData::pi_infty_1, EquationData::c_v_1, EquationData::q_infty_1),
+    EOS_phase2(EquationData::gamma_2, EquationData::pi_infty_2, EquationData::c_v_2, EquationData::q_infty_2),
     numerical_flux(EOS_phase1, EOS_phase2) {
       if(!apply_velocity_relax) {
         assert(!apply_pressure_relax && "You cannot apply pressure relaxation without applying velocity relaxation");

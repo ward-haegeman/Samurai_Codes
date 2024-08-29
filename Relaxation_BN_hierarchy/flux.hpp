@@ -24,10 +24,12 @@ namespace EquationData {
   // Parameters related to the EOS for the two phases
   static constexpr double gamma_1    = 4.4;
   static constexpr double pi_infty_1 = 6e8;
+  static constexpr double c_v_1      = 1816;
   static constexpr double q_infty_1  = 0.0;
 
   static constexpr double gamma_2    = 1.4;
   static constexpr double pi_infty_2 = 0.0;
+  static constexpr double c_v_2      = 1040;
   static constexpr double q_infty_2  = 0.0;
 }
 
