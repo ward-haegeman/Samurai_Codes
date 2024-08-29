@@ -21,19 +21,23 @@ def scatter_update(scatter, points):
 
 def line_plot(ax, x_Rusanov, y_Rusanov, x_HLLC, y_HLLC, x_HLLC_BR, y_HLLC_BR):
     #Plot results
-    plot_Rusanov = ax.plot(x_Rusanov, y_Rusanov, color='orange', linewidth=1, markersize=4, alpha=0.5)[0]
-    plot_HLLC    = ax.plot(x_HLLC, y_HLLC, 'r-', linewidth=1, markersize=4, alpha=0.5)[0]
-    plot_HLLC_BR = ax.plot(x_HLLC_BR, y_HLLC_BR, 'go', linewidth=1, markersize=4, alpha=0.5, markevery=32)[0]
+    plot_Rusanov = ax.plot(x_Rusanov, y_Rusanov, color='orange', linewidth=1, markersize=4, alpha=1)[0]
+    plot_HLLC    = ax.plot(x_HLLC, y_HLLC, 'r-', linewidth=1, markersize=4, alpha=1)[0]
+    plot_HLLC_BR = ax.plot(x_HLLC_BR, y_HLLC_BR, 'go', linewidth=1, markersize=4, alpha=1, markevery=32)[0]
 
     #Read and plot the analytical results
     if args.analytical is not None:
+        if args.column_analytical is None:
+            sys.exit("Unknown column to be read for the analytical solution")
         data_analytical = np.genfromtxt(args.analytical)
-        plot_analytical = ax.plot(data_analytical[:,0], data_analytical[:,1], 'k-', linewidth=1.5, markersize=3, alpha=0.5)[0]
+        plot_analytical = ax.plot(data_analytical[:,0], data_analytical[:,args.column_analytical], 'k-', linewidth=1.5, markersize=3, alpha=1)[0]
 
     #Read and plot the reference results
     if args.reference is not None:
+        if args.column_reference is None:
+            sys.exit("Unknown column to be read for the reference solution")
         data_ref = np.genfromtxt(args.reference)
-        plot_ref = ax.plot(data_ref[:,0], data_ref[:,2], 'b-', linewidth=1.5, markersize=3, alpha=0.5)[0]
+        plot_ref = ax.plot(data_ref[:,0], data_ref[:,args.column_reference], 'b-', linewidth=1.5, markersize=3, alpha=1)[0]
 
     #Add legend
     if args.analytical is not None:
@@ -69,7 +73,7 @@ class Plot:
             ax.set_title("Mesh")
             self.ax = [ax]
         else:
-            mesh_HLLC = read_mesh(filename_HLLC)
+            mesh_HLLC    = read_mesh(filename_HLLC)
             mesh_HLLC_BR = read_mesh(filename_HLLC_BR)
             for i, f in enumerate(args.field):
                 ax = plt.subplot(1, len(args.field), i + 1)
@@ -77,11 +81,11 @@ class Plot:
                 ax.set_title(f)
 
     def plot(self, ax, mesh_Rusanov, mesh_HLLC=None, mesh_HLLC_BR=None, field=None, init=True):
-        points = mesh_Rusanov['points']
-        connectivity = mesh_Rusanov['connectivity']
+        points_Rusanov       = mesh_Rusanov['points']
+        connectivity_Rusanov = mesh_Rusanov['connectivity']
 
-        segments_Rusanov = np.zeros((connectivity.shape[0], 2, 2))
-        segments_Rusanov[:, :, 0] = points[:][connectivity[:]][:, :, 0]
+        segments_Rusanov = np.zeros((connectivity_Rusanov.shape[0], 2, 2))
+        segments_Rusanov[:, :, 0] = points_Rusanov[:][connectivity_Rusanov[:]][:, :, 0]
 
         if field is None:
             segments_Rusanov[:, :, 1] = 0
@@ -94,27 +98,27 @@ class Plot:
                 self.index += 1
                 # self.lc.set_array(segments)
         else:
-            data_Rusanov = mesh_Rusanov['fields'][field][:]
-            centers_Rusanov = .5*(segments_Rusanov[:, 0, 0] + segments_Rusanov[:, 1, 0])
+            data_Rusanov    = mesh_Rusanov['fields'][field][:]
+            centers_Rusanov = 0.5*(segments_Rusanov[:, 0, 0] + segments_Rusanov[:, 1, 0])
             segments_Rusanov[:, :, 1] = data_Rusanov[:, np.newaxis]
             # ax.scatter(centers, data, marker='+')
             index_Rusanov = np.argsort(centers_Rusanov)
 
-            points_HLLC = mesh_HLLC['points']
+            points_HLLC       = mesh_HLLC['points']
             connectivity_HLLC = mesh_HLLC['connectivity']
-            segments_HLLC = np.zeros((connectivity_HLLC.shape[0], 2, 2))
-            segments_HLLC[:, :, 0] = points[:][connectivity_HLLC[:]][:, :, 0]
-            data_HLLC = mesh_HLLC['fields'][field][:]
-            centers_HLLC = .5*(segments_HLLC[:, 0, 0] + segments_HLLC[:, 1, 0])
+            segments_HLLC     = np.zeros((connectivity_HLLC.shape[0], 2, 2))
+            segments_HLLC[:, :, 0] = points_HLLC[:][connectivity_HLLC[:]][:, :, 0]
+            data_HLLC    = mesh_HLLC['fields'][field][:]
+            centers_HLLC = 0.5*(segments_HLLC[:, 0, 0] + segments_HLLC[:, 1, 0])
             segments_HLLC[:, :, 1] = data_HLLC[:, np.newaxis]
             index_HLLC = np.argsort(centers_HLLC)
 
-            points_HLLC_BR = mesh_HLLC_BR['points']
+            points_HLLC_BR       = mesh_HLLC_BR['points']
             connectivity_HLLC_BR = mesh_HLLC_BR['connectivity']
-            segments_HLLC_BR = np.zeros((connectivity_HLLC_BR.shape[0], 2, 2))
-            segments_HLLC_BR[:, :, 0] = points[:][connectivity_HLLC_BR[:]][:, :, 0]
-            data_HLLC_BR = mesh_HLLC_BR['fields'][field][:]
-            centers_HLLC_BR = .5*(segments_HLLC_BR[:, 0, 0] + segments_HLLC_BR[:, 1, 0])
+            segments_HLLC_BR     = np.zeros((connectivity_HLLC_BR.shape[0], 2, 2))
+            segments_HLLC_BR[:, :, 0] = points_HLLC_BR[:][connectivity_HLLC_BR[:]][:, :, 0]
+            data_HLLC_BR     = mesh_HLLC_BR['fields'][field][:]
+            centers_HLLC_BR  = .5*(segments_HLLC_BR[:, 0, 0] + segments_HLLC_BR[:, 1, 0])
             segments_HLLC_BR[:, :, 1] = data_HLLC_BR[:, np.newaxis]
             index_HLLC_BR = np.argsort(centers_HLLC_BR)
             if init:
@@ -132,12 +136,12 @@ class Plot:
             aax.autoscale_view()
 
     def update(self, filename_Rusanov, filename_HLLC, filename_HLLC_BR):
-        mesh_Rusanov = read_mesh(filename_HLLC)
+        mesh_Rusanov = read_mesh(filename_Rusanov)
         self.index = 0
         if args.field is None:
             self.plot(None, mesh_Rusanov, init=False)
         else:
-            mesh_HLLC = read_mesh(filename_HLLC)
+            mesh_HLLC    = read_mesh(filename_HLLC)
             mesh_HLLC_BR = read_mesh(filename_HLLC_BR)
 
             for i, f in enumerate(args.field):
@@ -156,7 +160,9 @@ parser.add_argument('--end', type=int, required=False, default=None, help='itera
 parser.add_argument('--save', type=str, required=False, help='output file')
 parser.add_argument('--wait', type=int, default=200, required=False, help='time between two plot in ms')
 parser.add_argument('--analytical', type=str, required=False, help='analytical solution 5 equations model')
+parser.add_argument('--column_analytical', type=int, required=False, help='variable of analytical solution 5 equations model')
 parser.add_argument('--reference', type=str, required=False, help='reference results')
+parser.add_argument('--column_reference', type=int, required=False, help='variable of reference results')
 args = parser.parse_args()
 
 if args.end is None:

@@ -28,36 +28,57 @@ int main(int argc, char* argv[]) {
   double cfl = 0.5;
 
   /*--- Output parameters ---*/
-  std::size_t nfiles = 20;
+  std::size_t nfiles = 10;
 
   /*--- Perform the simulation ---*/
   #ifdef FULL_BN
     bool apply_velocity_relax  = true;
     bool apply_pressure_relax  = true;
-    bool apply_pressure_reinit = false;
-    bool energy_update_phase_1 = true;
-    bool preserve_energy       = false;
+    #ifdef RELAX_POLYNOM
+      bool apply_pressure_reinit = true;
+      bool energy_update_phase_1 = true;
+      bool preserve_energy       = false;
 
-    // Create the instance of the class to perform the simulation
-    auto Relaxation_Sim = Relaxation(min_corner, max_corner, min_level, max_level,
-                                     Tf, cfl, nfiles,
-                                     apply_velocity_relax, apply_pressure_relax,
-                                     apply_pressure_reinit, energy_update_phase_1,
-                                     preserve_energy);
+      // Create the instance of the class to perform the simulation
+      auto Relaxation_Sim = Relaxation(min_corner, max_corner, min_level, max_level,
+                                       Tf, cfl, nfiles,
+                                       apply_velocity_relax, apply_pressure_relax,
+                                       apply_pressure_reinit, energy_update_phase_1,
+                                       preserve_energy);
+    #else
+      // Create the instance of the class to perform the simulation
+      auto Relaxation_Sim = Relaxation(min_corner, max_corner, min_level, max_level,
+                                       Tf, cfl, nfiles,
+                                       apply_velocity_relax, apply_pressure_relax);
+    #endif
 
     Relaxation_Sim.run();
+<<<<<<< HEAD
   #endif
   #ifdef TOT_ENERGY_6EQS
     bool apply_pressure_relax  = true;
     bool apply_pressure_reinit = false;
     bool energy_update_phase_1 = true;
     bool preserve_energy       = false;
+=======
+  #elifdef TOT_ENERGY_6EQS
+    bool apply_pressure_relax = true;
+    #ifdef RELAX_POLYNOM
+      bool apply_pressure_reinit = true;
+      bool energy_update_phase_1 = true;
+      bool preserve_energy       = false;
+>>>>>>> main
 
-    // Create the instance of the class to perform the simulation
-    auto Relaxation_Sim = Relaxation(min_corner, max_corner, min_level, max_level,
-                                     Tf, cfl, nfiles,
-                                     apply_pressure_relax, apply_pressure_reinit,
-                                     energy_update_phase_1, preserve_energy);
+      // Create the instance of the class to perform the simulation
+      auto Relaxation_Sim = Relaxation(min_corner, max_corner, min_level, max_level,
+                                       Tf, cfl, nfiles, apply_pressure_relax,
+                                       apply_pressure_reinit,
+                                       energy_update_phase_1, preserve_energy);
+    #else
+      // Create the instance of the class to perform the simulation
+      auto Relaxation_Sim = Relaxation(min_corner, max_corner, min_level, max_level,
+                                       Tf, cfl, nfiles, apply_pressure_relax);
+    #endif
 
     Relaxation_Sim.run();
   #endif

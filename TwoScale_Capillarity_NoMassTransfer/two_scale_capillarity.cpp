@@ -15,7 +15,7 @@ int main(int argc, char* argv[]) {
   std::size_t max_level = 7;
 
   // Simulation parameters
-  double Tf  = 0.2;
+  double Tf  = 2.0;
   double cfl = 0.4;
 
   bool apply_relaxation = true;

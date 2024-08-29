@@ -8,17 +8,17 @@
 //
 int main(int argc, char* argv[]) {
   // Mesh parameters
-  xt::xtensor_fixed<double, xt::xshape<EquationData::dim>> min_corner = {0.0, 0.0};
-  xt::xtensor_fixed<double, xt::xshape<EquationData::dim>> max_corner = {1.0, 0.5};
+  xt::xtensor_fixed<double, xt::xshape<EquationData::dim>> min_corner = {-0.5};
+  xt::xtensor_fixed<double, xt::xshape<EquationData::dim>> max_corner = {0.5};
   std::size_t min_level = 7;
   std::size_t max_level = 7;
 
   // Simulation parameters
-  double Tf  = 0.007;
+  double Tf  = 0.15;
   double cfl = 0.45;
 
   // Output parameters
-  std::size_t nfiles = 20;
+  std::size_t nfiles = 10;
 
   // Create the instance of the class to perform the simulation
   auto BN_Solver_Sim = BN_Solver(min_corner, max_corner, min_level, max_level,

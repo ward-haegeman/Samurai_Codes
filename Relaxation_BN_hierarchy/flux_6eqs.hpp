@@ -6,6 +6,8 @@
 
 #include "eos.hpp"
 
+#define ORDER_2
+
 namespace EquationData {
   static constexpr std::size_t dim = 1; // Spatial dimension. It would be ideal to be able to get it
                                         // direclty from Field, but I need to move the definition of these indices
@@ -47,7 +49,11 @@ namespace samurai {
     static_assert(field_size == EquationData::NVARS, "The number of elements in the state does not correpsond to the number of equations");
     static_assert(Field::dim == EquationData::dim, "The spatial dimesions do not match");
     static constexpr std::size_t output_field_size = field_size;
-    static constexpr std::size_t stencil_size      = 4;
+    #ifdef ORDER_2
+      static constexpr std::size_t stencil_size = 4;
+    #else
+      static constexpr std::size_t stencil_size = 2;
+    #endif
 
     using cfg = FluxConfig<SchemeType::NonLinear, output_field_size, stencil_size, Field>;
 
@@ -128,11 +134,12 @@ namespace samurai {
   public:
     RusanovFlux(const EOS<>& EOS_phase1, const EOS<>& EOS_phase2); // Constructor which accepts in inputs the equations of state of the two phases
 
+    auto make_flux(); // Compute the flux over all cells
+
+  private:
     FluxValue<typename Flux<Field>::cfg> compute_discrete_flux(const FluxValue<typename Flux<Field>::cfg>& qL,
                                                                const FluxValue<typename Flux<Field>::cfg>& qR,
                                                                const std::size_t curr_d); // Rusanov flux along direction d
-
-    auto make_flux(); // Compute the flux over all cells
   };
 
   // Constructor derived from base class
@@ -219,44 +226,53 @@ namespace samurai {
         // Compute now the "discrete" flux function
         discrete_flux[d].cons_flux_function = [&](auto& cells, const Field& field)
                                               {
-                                                // Compute the stencil
-                                                const auto& left_left   = cells[0];
-                                                const auto& left        = cells[1];
-                                                const auto& right       = cells[2];
-                                                const auto& right_right = cells[3];
+                                                #ifdef ORDER_2
+                                                  // Compute the stencil
+                                                  const auto& left_left   = cells[0];
+                                                  const auto& left        = cells[1];
+                                                  const auto& right       = cells[2];
+                                                  const auto& right_right = cells[3];
 
-                                                // MUSCL reconstruction
-                                                FluxValue<typename Flux<Field>::cfg> qL = field[left];
-                                                FluxValue<typename Flux<Field>::cfg> qR = field[right];
+                                                  // MUSCL reconstruction
+                                                  FluxValue<typename Flux<Field>::cfg> qL = field[left];
+                                                  FluxValue<typename Flux<Field>::cfg> qR = field[right];
 
-                                                const double beta = 1.0;
-                                                for(std::size_t comp = 0; comp < Field::size; ++comp) {
-                                                  if(field[right](comp) - field[left](comp) > 0.0) {
-                                                    qL(comp) += 0.5*std::max(0.0, std::max(std::min(beta*(field[left](comp) - field[left_left](comp)),
-                                                                                                    field[right](comp) - field[left](comp)),
-                                                                                           std::min(field[left](comp) - field[left_left](comp),
-                                                                                                    beta*(field[right](comp) - field[left](comp)))));
-                                                  }
-                                                  else if(field[right](comp) - field[left](comp) < 0.0) {
-                                                    qL(comp) += 0.5*std::min(0.0, std::min(std::max(beta*(field[left](comp) - field[left_left](comp)),
-                                                                                                    field[right](comp) - field[left](comp)),
-                                                                                           std::max(field[left](comp) - field[left_left](comp),
-                                                                                                    beta*(field[right](comp) - field[left](comp)))));
-                                                  }
+                                                  const double beta = 1.0;
+                                                  for(std::size_t comp = 0; comp < Field::size; ++comp) {
+                                                    if(field[right](comp) - field[left](comp) > 0.0) {
+                                                      qL(comp) += 0.5*std::max(0.0, std::max(std::min(beta*(field[left](comp) - field[left_left](comp)),
+                                                                                                      field[right](comp) - field[left](comp)),
+                                                                                             std::min(field[left](comp) - field[left_left](comp),
+                                                                                                      beta*(field[right](comp) - field[left](comp)))));
+                                                    }
+                                                    else if(field[right](comp) - field[left](comp) < 0.0) {
+                                                      qL(comp) += 0.5*std::min(0.0, std::min(std::max(beta*(field[left](comp) - field[left_left](comp)),
+                                                                                                      field[right](comp) - field[left](comp)),
+                                                                                             std::max(field[left](comp) - field[left_left](comp),
+                                                                                                      beta*(field[right](comp) - field[left](comp)))));
+                                                    }
 
-                                                  if(field[right_right](comp) - field[right](comp) > 0.0) {
-                                                    qR(comp) -= 0.5*std::max(0.0, std::max(std::min(beta*(field[right](comp) - field[left](comp)),
-                                                                                                    field[right_right](comp) - field[right](comp)),
-                                                                                           std::min(field[right](comp) - field[left](comp),
-                                                                                                    beta*(field[right_right](comp) - field[right](comp)))));
+                                                    if(field[right_right](comp) - field[right](comp) > 0.0) {
+                                                      qR(comp) -= 0.5*std::max(0.0, std::max(std::min(beta*(field[right](comp) - field[left](comp)),
+                                                                                                      field[right_right](comp) - field[right](comp)),
+                                                                                             std::min(field[right](comp) - field[left](comp),
+                                                                                                      beta*(field[right_right](comp) - field[right](comp)))));
+                                                    }
+                                                    else if(field[right_right](comp) - field[right](comp) < 0.0) {
+                                                      qR(comp) -= 0.5*std::min(0.0, std::min(std::max(beta*(field[right](comp) - field[left](comp)),
+                                                                                                      field[right_right](comp) - field[right](comp)),
+                                                                                             std::max(field[right](comp) - field[left](comp),
+                                                                                                      beta*(field[right_right](comp) - field[right](comp)))));
+                                                    }
                                                   }
-                                                  else if(field[right_right](comp) - field[right](comp) < 0.0) {
-                                                    qR(comp) -= 0.5*std::min(0.0, std::min(std::max(beta*(field[right](comp) - field[left](comp)),
-                                                                                                    field[right_right](comp) - field[right](comp)),
-                                                                                           std::max(field[right](comp) - field[left](comp),
-                                                                                                    beta*(field[right_right](comp) - field[right](comp)))));
-                                                  }
-                                                }
+                                                #else
+                                                  // Compute the stencil and extract state
+                                                  const auto& left  = cells[0];
+                                                  const auto& right = cells[1];
+
+                                                  const FluxValue<typename Flux<Field>::cfg>& qL = field[left];
+                                                  const FluxValue<typename Flux<Field>::cfg>& qR = field[right];
+                                                #endif
 
                                                 return compute_discrete_flux(qL, qR, d);
                                               };
@@ -275,13 +291,14 @@ namespace samurai {
   public:
     NonConservativeFlux(const EOS<>& EOS_phase1, const EOS<>& EOS_phase2); // Constructor which accepts in inputs the equations of state of the two phases
 
+    auto make_flux(); // Compute the flux over all cells
+
+  private:
     void compute_discrete_flux(const FluxValue<typename Flux<Field>::cfg>& qL,
                                const FluxValue<typename Flux<Field>::cfg>& qR,
                                const std::size_t curr_d,
                                FluxValue<typename Flux<Field>::cfg>& F_minus,
                                FluxValue<typename Flux<Field>::cfg>& F_plus); // Non-conservative flux
-
-    auto make_flux(); // Compute the flux over all cells
   };
 
   // Constructor derived from base class
@@ -289,7 +306,7 @@ namespace samurai {
   template<class Field>
   NonConservativeFlux<Field>::NonConservativeFlux(const EOS<>& EOS_phase1, const EOS<>& EOS_phase2): Flux<Field>(EOS_phase1, EOS_phase2) {}
 
-  // Implementation of a non-conservative flux from left to right
+  // Implementation of a non-conservative flux
   //
   template<class Field>
   void NonConservativeFlux<Field>::compute_discrete_flux(const FluxValue<typename Flux<Field>::cfg>& qL,
@@ -310,13 +327,13 @@ namespace samurai {
     /*--- Compute velocity and mass fractions left state ---*/
     const auto rhoL = qL(ALPHA1_RHO1_INDEX) + qL(ALPHA2_RHO2_INDEX);
     const auto Y1L  = qL(ALPHA1_RHO1_INDEX)/rhoL;
-    const auto Y2L  = qL(ALPHA2_RHO2_INDEX)/rhoL;
+    const auto Y2L  = 1.0 - Y1L;
     const auto velL = qL(RHO_U_INDEX + curr_d)/rhoL;
 
     /*--- Compute velocity and mass fractions right state ---*/
     const auto rhoR = qR(ALPHA1_RHO1_INDEX) + qR(ALPHA2_RHO2_INDEX);
     const auto Y1R  = qR(ALPHA1_RHO1_INDEX)/rhoR;
-    const auto Y2R  = qR(ALPHA2_RHO2_INDEX)/rhoR;
+    const auto Y2R  = 1.0 - Y1R;
     const auto velR = qR(RHO_U_INDEX + curr_d)/rhoR;
 
     /*--- Pressure phase 1 left state ---*/
@@ -389,6 +406,7 @@ namespace samurai {
         // Compute now the "discrete" non-conservative flux function
         discrete_flux[d].flux_function = [&](auto& cells, const Field& field)
                                             {
+<<<<<<< HEAD
                                               // Compute the stencil
                                               const auto& left_left   = cells[0];
                                               const auto& left        = cells[1];
@@ -414,21 +432,60 @@ namespace samurai {
                                                                                          std::max(field[left](comp) - field[left_left](comp),
                                                                                                   beta*(field[right](comp) - field[left](comp)))));
                                                 }
+=======
+                                              #ifdef ORDER_2
+                                                // Compute the stencil
+                                                const auto& left_left   = cells[0];
+                                                const auto& left        = cells[1];
+                                                const auto& right       = cells[2];
+                                                const auto& right_right = cells[3];
+>>>>>>> main
 
-                                                if(field[right_right](comp) - field[right](comp) > 0.0) {
-                                                  qR(comp) -= 0.5*std::max(0.0, std::max(std::min(beta*(field[right](comp) - field[left](comp)),
-                                                                                                  field[right_right](comp) - field[right](comp)),
-                                                                                         std::min(field[right](comp) - field[left](comp),
-                                                                                                  beta*(field[right_right](comp) - field[right](comp)))));
+                                                // MUSCL reconstruction
+                                                FluxValue<typename Flux<Field>::cfg> qL = field[left];
+                                                FluxValue<typename Flux<Field>::cfg> qR = field[right];
+
+                                                const double beta = 1.0;
+                                                for(std::size_t comp = 0; comp < Field::size; ++comp) {
+                                                  if(field[right](comp) - field[left](comp) > 0.0) {
+                                                    qL(comp) += 0.5*std::max(0.0, std::max(std::min(beta*(field[left](comp) - field[left_left](comp)),
+                                                                                                    field[right](comp) - field[left](comp)),
+                                                                                           std::min(field[left](comp) - field[left_left](comp),
+                                                                                                    beta*(field[right](comp) - field[left](comp)))));
+                                                  }
+                                                  else if(field[right](comp) - field[left](comp) < 0.0) {
+                                                    qL(comp) += 0.5*std::min(0.0, std::min(std::max(beta*(field[left](comp) - field[left_left](comp)),
+                                                                                                    field[right](comp) - field[left](comp)),
+                                                                                           std::max(field[left](comp) - field[left_left](comp),
+                                                                                                    beta*(field[right](comp) - field[left](comp)))));
+                                                  }
+
+                                                  if(field[right_right](comp) - field[right](comp) > 0.0) {
+                                                    qR(comp) -= 0.5*std::max(0.0, std::max(std::min(beta*(field[right](comp) - field[left](comp)),
+                                                                                                    field[right_right](comp) - field[right](comp)),
+                                                                                           std::min(field[right](comp) - field[left](comp),
+                                                                                                    beta*(field[right_right](comp) - field[right](comp)))));
+                                                  }
+                                                  else if(field[right_right](comp) - field[right](comp) < 0.0) {
+                                                    qR(comp) -= 0.5*std::min(0.0, std::min(std::max(beta*(field[right](comp) - field[left](comp)),
+                                                                                                    field[right_right](comp) - field[right](comp)),
+                                                                                           std::max(field[right](comp) - field[left](comp),
+                                                                                                    beta*(field[right_right](comp) - field[right](comp)))));
+                                                  }
                                                 }
-                                                else if(field[right_right](comp) - field[right](comp) < 0.0) {
-                                                  qR(comp) -= 0.5*std::min(0.0, std::min(std::max(beta*(field[right](comp) - field[left](comp)),
-                                                                                                  field[right_right](comp) - field[right](comp)),
-                                                                                         std::max(field[right](comp) - field[left](comp),
-                                                                                                  beta*(field[right_right](comp) - field[right](comp)))));
-                                                }
+<<<<<<< HEAD
                                               }
                                               */
+=======
+                                              #else
+                                                // Compute the stencil and extract state
+                                                const auto& left  = cells[0];
+                                                const auto& right = cells[1];
+
+                                                const FluxValue<typename Flux<Field>::cfg>& qL = field[left];
+                                                const FluxValue<typename Flux<Field>::cfg>& qR = field[right];
+                                              #endif
+>>>>>>> main
 
                                               FluxValue<typename Flux<Field>::cfg> F_minus,
                                                                                    F_plus;
@@ -456,19 +513,26 @@ namespace samurai {
   public:
     HLLCFlux(const EOS<>& EOS_phase1, const EOS<>& EOS_phase2); // Constructor which accepts in inputs the equations of state of the two phases
 
+    auto make_flux(); // Compute the flux over all cells
+
+    #ifdef ORDER_2
+      FluxValue<typename Flux<Field>::cfg> compute_high_order_contribution(const FluxValue<typename Flux<Field>::cfg>& qLL,
+                                                                           const FluxValue<typename Flux<Field>::cfg>& qL,
+                                                                           const std::size_t curr_d = 0); // High-order contribution
+                                                                                                          // for the wave propagation formalism
+    #endif
+
+  private:
+    auto compute_middle_state(const FluxValue<typename Flux<Field>::cfg>& q,
+                              const typename Field::value_type S,
+                              const typename Field::value_type S_star,
+                              const std::size_t curr_d) const; // Compute the middle state
+
     void compute_discrete_flux(const FluxValue<typename Flux<Field>::cfg>& qL,
                                const FluxValue<typename Flux<Field>::cfg>& qR,
                                const std::size_t curr_d,
                                FluxValue<typename Flux<Field>::cfg>& H_minus,
                                FluxValue<typename Flux<Field>::cfg>& H_plus); // Compute the flux in a 'non-conservative' fashion (wave propagation formalism)
-
-    auto make_flux(); // Compute the flux over all cells
-
-  private:
-    auto compute_middle_state(const FluxValue<typename Flux<Field>::cfg>& q,
-                              const auto S,
-                              const auto S_star,
-                              const std::size_t curr_d); // Compute the middle state
   };
 
   // Constructor derived from base class
@@ -476,7 +540,57 @@ namespace samurai {
   template<class Field>
   HLLCFlux<Field>::HLLCFlux(const EOS<>& EOS_phase1, const EOS<>& EOS_phase2): Flux<Field>(EOS_phase1, EOS_phase2) {}
 
-  // Implementation of a HLLC flux (left to right contribution in the wave propagation formalism)
+  // Implement the auxliary routine that computes the middle state
+  //
+  template<class Field>
+  auto HLLCFlux<Field>::compute_middle_state(const FluxValue<typename Flux<Field>::cfg>& q,
+                                             const typename Field::value_type S,
+                                             const typename Field::value_type S_star,
+                                             const std::size_t curr_d) const {
+    /*-- Save mixture density and velocity current direction ---*/
+    const auto rho   = q(ALPHA1_RHO1_INDEX) + q(ALPHA2_RHO2_INDEX);
+    const auto vel_d = q(RHO_U_INDEX + curr_d)/rho;
+
+    /*--- Phase 1 ---*/
+    const auto alpha1 = q(ALPHA1_INDEX);
+    const auto rho1   = q(ALPHA1_RHO1_INDEX)/alpha1; /*--- TODO: Add treatment for vanishing volume fraction ---*/
+    auto e1           = q(ALPHA1_RHO1_E1_INDEX)/q(ALPHA1_RHO1_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+    for(std::size_t d = 0; d < EquationData::dim; ++d) {
+      e1 -= 0.5*(q(RHO_U_INDEX + d)/rho)*(q(RHO_U_INDEX + d)/rho);
+    }
+    const auto p1     = this->phase1.pres_value(rho1, e1);
+
+    /*--- Phase 2 ---*/
+    const auto rho2   = q(ALPHA2_RHO2_INDEX)/(1.0 - alpha1); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+    auto e2           = q(ALPHA2_RHO2_E2_INDEX)/q(ALPHA2_RHO2_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+    for(std::size_t d = 0; d < EquationData::dim; ++d) {
+      e2 -= 0.5*(q(RHO_U_INDEX + d)/rho)*(q(RHO_U_INDEX + d)/rho);
+    }
+    const auto p2     = this->phase2.pres_value(rho2, e2);
+
+    /*--- Compute middle state ---*/
+    FluxValue<typename Flux<Field>::cfg> q_star;
+
+    q_star(ALPHA1_INDEX)         = alpha1;
+    q_star(ALPHA1_RHO1_INDEX)    = q(ALPHA1_RHO1_INDEX)*((S - vel_d)/(S - S_star));
+    q_star(ALPHA2_RHO2_INDEX)    = q(ALPHA2_RHO2_INDEX)*((S - vel_d)/(S - S_star));
+    q_star(RHO_U_INDEX + curr_d) = rho*((S - vel_d)/(S - S_star))*S_star;
+    if(EquationData::dim > 1) {
+      for(std::size_t d = 0; d < dim; ++d) {
+        if(d != curr_d) {
+          q_star(RHO_U_INDEX + d) = rho*((S - vel_d)/(S - S_star))*(q(RHO_U_INDEX + d)/rho);
+        }
+      }
+    }
+    q_star(ALPHA1_RHO1_E1_INDEX) = q(ALPHA1_RHO1_INDEX)*((S - vel_d)/(S - S_star))*
+                                   (q(ALPHA1_RHO1_E1_INDEX)/q(ALPHA1_RHO1_INDEX) + (S_star - vel_d)*(S_star + p1/(rho1*(S - vel_d))));
+    q_star(ALPHA2_RHO2_E2_INDEX) = q(ALPHA2_RHO2_INDEX)*((S - vel_d)/(S - S_star))*
+                                   (q(ALPHA2_RHO2_E2_INDEX)/q(ALPHA2_RHO2_INDEX) + (S_star - vel_d)*(S_star + p2/(rho2*(S - vel_d))));
+
+    return q_star;
+  }
+
+  // Implementation of a HLLC flux (wave propagation formalism)
   //
   template<class Field>
   void HLLCFlux<Field>::compute_discrete_flux(const FluxValue<typename Flux<Field>::cfg>& qL,
@@ -575,13 +689,201 @@ namespace samurai {
     }
   }
 
+  // Implementation of a HLLC flux (wave propagation formalism)
+  //
+  #ifdef ORDER_2
+  template<class Field>
+  FluxValue<typename Flux<Field>::cfg> HLLCFlux<Field>::
+  compute_high_order_contribution(const FluxValue<typename Flux<Field>::cfg>& qLL,
+                                  const FluxValue<typename Flux<Field>::cfg>& qL,
+                                  const std::size_t curr_d) {
+    /*--- Compute useful quantites to construct our flux ---*/
+
+    // Save mixture density and velocity current direction left state (w.r.t cell)
+    const auto rhoLL   = qLL(ALPHA1_RHO1_INDEX) + qLL(ALPHA2_RHO2_INDEX);
+    const auto velLL_d = qLL(RHO_U_INDEX + curr_d)/rhoLL;
+
+    // Left state (w.r.t cell) phase 1
+    const auto alpha1LL = qLL(ALPHA1_INDEX);
+    const auto rho1LL   = qLL(ALPHA1_RHO1_INDEX)/alpha1LL; /*--- TODO: Add treatment for vanishing volume fraction ---*/
+    auto e1LL           = qLL(ALPHA1_RHO1_E1_INDEX)/qL(ALPHA1_RHO1_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+    for(std::size_t d  = 0; d < EquationData::dim; ++d) {
+      e1LL -= 0.5*(qLL(RHO_U_INDEX + d)/rhoLL)*(qLL(RHO_U_INDEX + d)/rhoLL);
+    }
+    const auto p1LL    = this->phase1.pres_value(rho1LL, e1LL);
+    const auto c1LL    = this->phase1.c_value(rho1LL, p1LL);
+
+    // Left state (w.r.t cell) phase 2
+    const auto rho2LL  = qLL(ALPHA2_RHO2_INDEX)/(1.0 - alpha1LL); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+    auto e2LL          = qLL(ALPHA2_RHO2_E2_INDEX)/qLL(ALPHA2_RHO2_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+    for(std::size_t d = 0; d < EquationData::dim; ++d) {
+      e2LL -= 0.5*(qLL(RHO_U_INDEX + d)/rhoLL)*(qLL(RHO_U_INDEX + d)/rhoLL);
+    }
+    const auto p2LL    = this->phase2.pres_value(rho2LL, e2LL);
+    const auto c2LL    = this->phase2.c_value(rho2LL, p2LL);
+
+    // Compute frozen speed of sound and mixture pressure left state (w.r.t cell)
+    const auto Y1LL = qLL(ALPHA1_RHO1_INDEX)/rhoLL;
+    const auto cLL  = std::sqrt(Y1LL*c1LL*c1LL + (1.0 - Y1LL)*c2LL*c2LL);
+    const auto pLL  = alpha1LL*p1LL + (1.0 - alpha1LL)*p2LL;
+
+    // Save mixture density and velocity current direction right state (w.r.t cell)
+    const auto rhoL   = qL(ALPHA1_RHO1_INDEX) + qL(ALPHA2_RHO2_INDEX);
+    const auto velL_d = qL(RHO_U_INDEX + curr_d)/rhoL;
+
+    // Right state (w.r.t cell) phase 1
+    const auto alpha1L = qL(ALPHA1_INDEX);
+    const auto rho1L   = qL(ALPHA1_RHO1_INDEX)/alpha1L; /*--- TODO: Add treatment for vanishing volume fraction ---*/
+    auto e1L           = qL(ALPHA1_RHO1_E1_INDEX)/qL(ALPHA1_RHO1_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+    for(std::size_t d = 0; d < EquationData::dim; ++d) {
+      e1L -= 0.5*(qL(RHO_U_INDEX + d)/rhoL)*(qL(RHO_U_INDEX + d)/rhoL);
+    }
+    const auto p1L     = this->phase1.pres_value(rho1L, e1L);
+    const auto c1L     = this->phase1.c_value(rho1L, p1L);
+
+    // Right state (w.r.t cell) phase 2
+    const auto rho2L   = qL(ALPHA2_RHO2_INDEX)/(1.0 - alpha1L); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+    auto e2L           = qL(ALPHA2_RHO2_E2_INDEX)/qL(ALPHA2_RHO2_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
+    for(std::size_t d = 0; d < EquationData::dim; ++d) {
+      e2L -= 0.5*(qL(RHO_U_INDEX + d)/rhoL)*(qL(RHO_U_INDEX + d)/rhoL);
+    }
+    const auto p2L     = this->phase2.pres_value(rho2L, e2L);
+    const auto c2L     = this->phase2.c_value(rho2L, p2L);
+
+    // Compute frozen speed of sound and mixture pressure right state (w.r.t cell)
+    const auto Y1L = qL(ALPHA1_RHO1_INDEX)/rhoL;
+    const auto cL  = std::sqrt(Y1L*c1L*c1L + (1.0 - Y1L)*c2L*c2L);
+    const auto pL  = alpha1L*p1L + (1.0 - alpha1L)*p2L;
+
+    /*--- Compute speeds of wave propagation ---*/
+    const auto sLL    = std::min(velLL_d - cLL, velL_d - cL);
+    const auto sL     = std::max(velLL_d + cLL, velL_d + cL);
+    const auto s_star = (pL - pLL + rhoLL*velLL_d*(sLL - velLL_d) - rhoL*velL_d*(sL - velL_d))/
+                        (rhoLL*(sLL - velLL_d) - rhoL*(sL - velL_d));
+
+    /*--- Compute intermediate states ---*/
+    const auto q_star_LL = compute_middle_state(qLL, sLL, s_star, curr_d);
+    const auto q_star_L  = compute_middle_state(qL, sL, s_star, curr_d);
+
+    /*--- Compute the fluctuations (wave propagation formalism) ---*/
+    return sLL*(q_star_LL - qLL) + s_star*(q_star_L - q_star_LL) + sL*(qL - q_star_L);
+  }
+  #endif
+
+  // Implement the contribution of the discrete flux for all the cells in the mesh.
+  //
+  template<class Field>
+  auto HLLCFlux<Field>::make_flux() {
+    FluxDefinition<typename Flux<Field>::cfg> discrete_flux;
+
+    /*--- Perform the loop over each dimension to compute the flux contribution ---*/
+    static_for<0, EquationData::dim>::apply(
+      [&](auto integral_constant_d)
+      {
+        static constexpr int d = decltype(integral_constant_d)::value;
+
+        // Compute now the "discrete" flux function
+        discrete_flux[d].flux_function = [&](auto& cells, const Field& field)
+                                         {
+                                           #ifdef ORDER_2
+                                             // Compute the stencil
+                                             const auto& left_left      = cells[0];
+                                             const auto& left           = cells[1];
+                                             const auto& right          = cells[2];
+                                             const auto& right_right    = cells[3];
+
+                                             // MUSCL reconstruction
+                                             FluxValue<typename Flux<Field>::cfg> qL = field[left];
+                                             FluxValue<typename Flux<Field>::cfg> qR = field[right];
+
+                                             const double beta = 1.0;
+                                             for(std::size_t comp = 0; comp < Field::size; ++comp) {
+                                               if(field[right](comp) - field[left](comp) > 0.0) {
+                                                 qL(comp) += 0.5*std::max(0.0, std::max(std::min(beta*(field[left](comp) - field[left_left](comp)),
+                                                                                                 field[right](comp) - field[left](comp)),
+                                                                                        std::min(field[left](comp) - field[left_left](comp),
+                                                                                                 beta*(field[right](comp) - field[left](comp)))));
+                                               }
+                                               else if(field[right](comp) - field[left](comp) < 0.0) {
+                                                 qL(comp) += 0.5*std::min(0.0, std::min(std::max(beta*(field[left](comp) - field[left_left](comp)),
+                                                                                                 field[right](comp) - field[left](comp)),
+                                                                                        std::max(field[left](comp) - field[left_left](comp),
+                                                                                                 beta*(field[right](comp) - field[left](comp)))));
+                                               }
+
+                                               if(field[right_right](comp) - field[right](comp) > 0.0) {
+                                                 qR(comp) -= 0.5*std::max(0.0, std::max(std::min(beta*(field[right](comp) - field[left](comp)),
+                                                                                                 field[right_right](comp) - field[right](comp)),
+                                                                                        std::min(field[right](comp) - field[left](comp),
+                                                                                                 beta*(field[right_right](comp) - field[right](comp)))));
+                                               }
+                                               else if(field[right_right](comp) - field[right](comp) < 0.0) {
+                                                 qR(comp) -= 0.5*std::min(0.0, std::min(std::max(beta*(field[right](comp) - field[left](comp)),
+                                                                                                 field[right_right](comp) - field[right](comp)),
+                                                                                        std::max(field[right](comp) - field[left](comp),
+                                                                                                 beta*(field[right_right](comp) - field[right](comp)))));
+                                               }
+                                             }
+                                           #else
+                                             // Compute the stencil and extract state
+                                             const auto& left  = cells[0];
+                                             const auto& right = cells[1];
+
+                                             const FluxValue<typename Flux<Field>::cfg>& qL = field[left];
+                                             const FluxValue<typename Flux<Field>::cfg>& qR = field[right];
+                                           #endif
+
+                                           FluxValue<typename Flux<Field>::cfg> H_minus,
+                                                                                H_plus;
+
+                                           compute_discrete_flux(qL, qR, d, H_minus, H_plus);
+
+                                           samurai::FluxValuePair<typename Flux<Field>::cfg> flux;
+                                           flux[0] = H_minus;
+                                           flux[1] = -H_plus;
+
+                                           return flux;
+                                          };
+      }
+    );
+
+    return make_flux_based_scheme(discrete_flux);
+  }
+
+
+  /**
+    * Implementation of a HLLC flux (just for the conservative part)
+    */
+  template<class Field>
+  class HLLCFlux_Conservative: public Flux<Field> {
+  public:
+    HLLCFlux_Conservative(const EOS<>& EOS_phase1, const EOS<>& EOS_phase2); // Constructor which accepts in inputs the equations of state of the two phases
+
+    auto make_flux(); // Compute the flux over all cells
+
+  private:
+    auto compute_middle_state(const FluxValue<typename Flux<Field>::cfg>& q,
+                              const typename Field::value_type S,
+                              const typename Field::value_type S_star,
+                              const std::size_t curr_d) const; // Compute the middle state
+
+    FluxValue<typename Flux<Field>::cfg> compute_discrete_flux(const FluxValue<typename Flux<Field>::cfg>& qL,
+                                                               const FluxValue<typename Flux<Field>::cfg>& qR,
+                                                               const std::size_t curr_d); // Compute the flux just for the conservative part
+  };
+
+  // Constructor derived from base class
+  //
+  template<class Field>
+  HLLCFlux_Conservative<Field>::HLLCFlux_Conservative(const EOS<>& EOS_phase1, const EOS<>& EOS_phase2): Flux<Field>(EOS_phase1, EOS_phase2) {}
+
   // Implement the auxliary routine that computes the middle state
   //
   template<class Field>
-  auto HLLCFlux<Field>::compute_middle_state(const FluxValue<typename Flux<Field>::cfg>& q,
-                                             const auto S,
-                                             const auto S_star,
-                                             const std::size_t curr_d) {
+  auto HLLCFlux_Conservative<Field>::compute_middle_state(const FluxValue<typename Flux<Field>::cfg>& q,
+                                                          const typename Field::value_type S,
+                                                          const typename Field::value_type S_star,
+                                                          const std::size_t curr_d) const {
     /*-- Save mixture density and velocity current direction ---*/
     const auto rho   = q(ALPHA1_RHO1_INDEX) + q(ALPHA2_RHO2_INDEX);
     const auto vel_d = q(RHO_U_INDEX + curr_d)/rho;
@@ -624,104 +926,6 @@ namespace samurai {
 
     return q_star;
   }
-
-  // Implement the contribution of the discrete flux for all the cells in the mesh.
-  //
-  template<class Field>
-  auto HLLCFlux<Field>::make_flux() {
-    FluxDefinition<typename Flux<Field>::cfg> discrete_flux;
-
-    /*--- Perform the loop over each dimension to compute the flux contribution ---*/
-    static_for<0, EquationData::dim>::apply(
-      [&](auto integral_constant_d)
-      {
-        static constexpr int d = decltype(integral_constant_d)::value;
-
-        // Compute now the "discrete" flux function
-        discrete_flux[d].flux_function = [&](auto& cells, const Field& field)
-                                         {
-                                           // Compute the stencil
-                                           const auto& left_left   = cells[0];
-                                           const auto& left        = cells[1];
-                                           const auto& right       = cells[2];
-                                           const auto& right_right = cells[3];
-
-                                           // MUSCL reconstruction
-                                           FluxValue<typename Flux<Field>::cfg> qL = field[left];
-                                           FluxValue<typename Flux<Field>::cfg> qR = field[right];
-
-                                           const double beta = 1.0;
-                                           for(std::size_t comp = 0; comp < Field::size; ++comp) {
-                                             if(field[right](comp) - field[left](comp) > 0.0) {
-                                               qL(comp) += 0.5*std::max(0.0, std::max(std::min(beta*(field[left](comp) - field[left_left](comp)),
-                                                                                               field[right](comp) - field[left](comp)),
-                                                                                      std::min(field[left](comp) - field[left_left](comp),
-                                                                                               beta*(field[right](comp) - field[left](comp)))));
-                                             }
-                                             else if(field[right](comp) - field[left](comp) < 0.0) {
-                                               qL(comp) += 0.5*std::min(0.0, std::min(std::max(beta*(field[left](comp) - field[left_left](comp)),
-                                                                                               field[right](comp) - field[left](comp)),
-                                                                                      std::max(field[left](comp) - field[left_left](comp),
-                                                                                               beta*(field[right](comp) - field[left](comp)))));
-                                             }
-
-                                             if(field[right_right](comp) - field[right](comp) > 0.0) {
-                                               qR(comp) -= 0.5*std::max(0.0, std::max(std::min(beta*(field[right](comp) - field[left](comp)),
-                                                                                               field[right_right](comp) - field[right](comp)),
-                                                                                      std::min(field[right](comp) - field[left](comp),
-                                                                                               beta*(field[right_right](comp) - field[right](comp)))));
-                                             }
-                                             else if(field[right_right](comp) - field[right](comp) < 0.0) {
-                                               qR(comp) -= 0.5*std::min(0.0, std::min(std::max(beta*(field[right](comp) - field[left](comp)),
-                                                                                               field[right_right](comp) - field[right](comp)),
-                                                                                      std::max(field[right](comp) - field[left](comp),
-                                                                                               beta*(field[right_right](comp) - field[right](comp)))));
-                                             }
-                                           }
-
-                                           FluxValue<typename Flux<Field>::cfg> H_minus,
-                                                                                H_plus;
-
-                                           compute_discrete_flux(qL, qR, d, H_minus, H_plus);
-
-                                           samurai::FluxValuePair<typename Flux<Field>::cfg> flux;
-                                           flux[0] = H_minus;
-                                           flux[1] = -H_plus;
-
-                                           return flux;
-                                          };
-      }
-    );
-
-    return make_flux_based_scheme(discrete_flux);
-  }
-
-
-  /**
-    * Implementation of a HLLC flux (just for the conservative part)
-    */
-  template<class Field>
-  class HLLCFlux_Conservative: public Flux<Field> {
-  public:
-    HLLCFlux_Conservative(const EOS<>& EOS_phase1, const EOS<>& EOS_phase2); // Constructor which accepts in inputs the equations of state of the two phases
-
-    FluxValue<typename Flux<Field>::cfg> compute_discrete_flux(const FluxValue<typename Flux<Field>::cfg>& qL,
-                                                               const FluxValue<typename Flux<Field>::cfg>& qR,
-                                                               const std::size_t curr_d); // Compute the flux just for the conservative part
-
-    auto make_flux(); // Compute the flux over all cells
-
-  private:
-    auto compute_middle_state(const FluxValue<typename Flux<Field>::cfg>& q,
-                              const auto S,
-                              const auto S_star,
-                              const std::size_t curr_d); // Compute the middle state
-  };
-
-  // Constructor derived from base class
-  //
-  template<class Field>
-  HLLCFlux_Conservative<Field>::HLLCFlux_Conservative(const EOS<>& EOS_phase1, const EOS<>& EOS_phase2): Flux<Field>(EOS_phase1, EOS_phase2) {}
 
   // Implementation of a HLLC flux for the conservative part
   //
@@ -812,56 +1016,6 @@ namespace samurai {
     }
   }
 
-  // Implement the auxliary routine that computes the middle state
-  //
-  template<class Field>
-  auto HLLCFlux_Conservative<Field>::compute_middle_state(const FluxValue<typename Flux<Field>::cfg>& q,
-                                                          const auto S,
-                                                          const auto S_star,
-                                                          const std::size_t curr_d) {
-    /*-- Save mixture density and velocity current direction ---*/
-    const auto rho   = q(ALPHA1_RHO1_INDEX) + q(ALPHA2_RHO2_INDEX);
-    const auto vel_d = q(RHO_U_INDEX + curr_d)/rho;
-
-    /*--- Phase 1 ---*/
-    const auto alpha1 = q(ALPHA1_INDEX);
-    const auto rho1   = q(ALPHA1_RHO1_INDEX)/alpha1; /*--- TODO: Add treatment for vanishing volume fraction ---*/
-    auto e1           = q(ALPHA1_RHO1_E1_INDEX)/q(ALPHA1_RHO1_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
-    for(std::size_t d = 0; d < EquationData::dim; ++d) {
-      e1 -= 0.5*(q(RHO_U_INDEX + d)/rho)*(q(RHO_U_INDEX + d)/rho);
-    }
-    const auto p1     = this->phase1.pres_value(rho1, e1);
-
-    /*--- Phase 2 ---*/
-    const auto rho2   = q(ALPHA2_RHO2_INDEX)/(1.0 - alpha1); /*--- TODO: Add treatment for vanishing volume fraction ---*/
-    auto e2           = q(ALPHA2_RHO2_E2_INDEX)/q(ALPHA2_RHO2_INDEX); /*--- TODO: Add treatment for vanishing volume fraction ---*/
-    for(std::size_t d = 0; d < EquationData::dim; ++d) {
-      e2 -= 0.5*(q(RHO_U_INDEX + d)/rho)*(q(RHO_U_INDEX + d)/rho);
-    }
-    const auto p2     = this->phase2.pres_value(rho2, e2);
-
-    /*--- Compute middle state ---*/
-    FluxValue<typename Flux<Field>::cfg> q_star;
-
-    q_star(ALPHA1_INDEX)         = alpha1;
-    q_star(ALPHA1_RHO1_INDEX)    = q(ALPHA1_RHO1_INDEX)*((S - vel_d)/(S - S_star));
-    q_star(ALPHA2_RHO2_INDEX)    = q(ALPHA2_RHO2_INDEX)*((S - vel_d)/(S - S_star));
-    q_star(RHO_U_INDEX + curr_d) = rho*((S - vel_d)/(S - S_star))*S_star;
-    if(EquationData::dim > 1) {
-      for(std::size_t d = 0; d < dim; ++d) {
-        if(d != curr_d) {
-          q_star(RHO_U_INDEX + d) = rho*((S - vel_d)/(S - S_star))*(q(RHO_U_INDEX + d)/rho);
-        }
-      }
-    }
-    q_star(ALPHA1_RHO1_E1_INDEX) = q(ALPHA1_RHO1_INDEX)*((S - vel_d)/(S - S_star))*
-                                   (q(ALPHA1_RHO1_E1_INDEX)/q(ALPHA1_RHO1_INDEX) + (S_star - vel_d)*(S_star + p1/(rho1*(S - vel_d))));
-    q_star(ALPHA2_RHO2_E2_INDEX) = q(ALPHA2_RHO2_INDEX)*((S - vel_d)/(S - S_star))*
-                                   (q(ALPHA2_RHO2_E2_INDEX)/q(ALPHA2_RHO2_INDEX) + (S_star - vel_d)*(S_star + p2/(rho2*(S - vel_d))));
-
-    return q_star;
-  }
-
   // Implement the contribution of the discrete flux for all the cells in the mesh.
   //
   template<class Field>
@@ -877,6 +1031,7 @@ namespace samurai {
         // Compute now the "discrete" flux function
         discrete_flux[d].cons_flux_function = [&](auto& cells, const Field& field)
                                               {
+<<<<<<< HEAD
                                                 // Compute the stencil
                                                 const auto& left_left   = cells[0];
                                                 const auto& left        = cells[1];
@@ -917,6 +1072,55 @@ namespace samurai {
                                                   }
                                                 }
                                                 */
+=======
+                                                #ifdef ORDER_2
+                                                  // Compute the stencil
+                                                  const auto& left_left   = cells[0];
+                                                  const auto& left        = cells[1];
+                                                  const auto& right       = cells[2];
+                                                  const auto& right_right = cells[3];
+
+                                                  // MUSCL reconstruction
+                                                  FluxValue<typename Flux<Field>::cfg> qL = field[left];
+                                                  FluxValue<typename Flux<Field>::cfg> qR = field[right];
+
+                                                  const double beta = 1.0;
+                                                  for(std::size_t comp = 0; comp < Field::size; ++comp) {
+                                                    if(field[right](comp) - field[left](comp) > 0.0) {
+                                                      qL(comp) += 0.5*std::max(0.0, std::max(std::min(beta*(field[left](comp) - field[left_left](comp)),
+                                                                                                      field[right](comp) - field[left](comp)),
+                                                                                             std::min(field[left](comp) - field[left_left](comp),
+                                                                                                      beta*(field[right](comp) - field[left](comp)))));
+                                                    }
+                                                    else if(field[right](comp) - field[left](comp) < 0.0) {
+                                                      qL(comp) += 0.5*std::min(0.0, std::min(std::max(beta*(field[left](comp) - field[left_left](comp)),
+                                                                                                      field[right](comp) - field[left](comp)),
+                                                                                             std::max(field[left](comp) - field[left_left](comp),
+                                                                                                      beta*(field[right](comp) - field[left](comp)))));
+                                                    }
+
+                                                    if(field[right_right](comp) - field[right](comp) > 0.0) {
+                                                      qR(comp) -= 0.5*std::max(0.0, std::max(std::min(beta*(field[right](comp) - field[left](comp)),
+                                                                                                      field[right_right](comp) - field[right](comp)),
+                                                                                             std::min(field[right](comp) - field[left](comp),
+                                                                                                      beta*(field[right_right](comp) - field[right](comp)))));
+                                                    }
+                                                    else if(field[right_right](comp) - field[right](comp) < 0.0) {
+                                                      qR(comp) -= 0.5*std::min(0.0, std::min(std::max(beta*(field[right](comp) - field[left](comp)),
+                                                                                                      field[right_right](comp) - field[right](comp)),
+                                                                                             std::max(field[right](comp) - field[left](comp),
+                                                                                                      beta*(field[right_right](comp) - field[right](comp)))));
+                                                    }
+                                                  }
+                                                #else
+                                                  // Compute the stencil and extract state
+                                                  const auto& left  = cells[0];
+                                                  const auto& right = cells[1];
+
+                                                  FluxValue<typename Flux<Field>::cfg> qL = field[left];
+                                                  FluxValue<typename Flux<Field>::cfg> qR = field[right];
+                                                #endif
+>>>>>>> main
 
                                                 return compute_discrete_flux(qL, qR, d);;
                                           };
