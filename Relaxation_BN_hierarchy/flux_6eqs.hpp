@@ -25,10 +25,12 @@ namespace EquationData {
   /*--- Parameters related to the EOS for the two phases ---*/
   static constexpr double gamma_1    = 2.35;
   static constexpr double pi_infty_1 = 1e9;
+  static constexpr double c_v_1      = 1816;
   static constexpr double q_infty_1  = -1167e3;
 
   static constexpr double gamma_2    = 1.43;
   static constexpr double pi_infty_2 = 0.0;
+  static constexpr double c_v_2      = 1040;
   static constexpr double q_infty_2  = 2030e3;
 }
 
@@ -404,12 +406,40 @@ namespace samurai {
         // Compute now the "discrete" non-conservative flux function
         discrete_flux[d].flux_function = [&](auto& cells, const Field& field)
                                             {
+<<<<<<< HEAD
+                                              // Compute the stencil
+                                              const auto& left_left   = cells[0];
+                                              const auto& left        = cells[1];
+                                              const auto& right       = cells[2];
+                                              const auto& right_right = cells[3];
+
+                                              // MUSCL reconstruction
+                                              FluxValue<typename Flux<Field>::cfg> qL = field[left];
+                                              FluxValue<typename Flux<Field>::cfg> qR = field[right];
+
+                                              /*
+                                              const double beta = 1.0;
+                                              for(std::size_t comp = 0; comp < Field::size; ++comp) {
+                                                if(field[right](comp) - field[left](comp) > 0.0) {
+                                                  qL(comp) += 0.5*std::max(0.0, std::max(std::min(beta*(field[left](comp) - field[left_left](comp)),
+                                                                                                  field[right](comp) - field[left](comp)),
+                                                                                         std::min(field[left](comp) - field[left_left](comp),
+                                                                                                  beta*(field[right](comp) - field[left](comp)))));
+                                                }
+                                                else if(field[right](comp) - field[left](comp) < 0.0) {
+                                                  qL(comp) += 0.5*std::min(0.0, std::min(std::max(beta*(field[left](comp) - field[left_left](comp)),
+                                                                                                  field[right](comp) - field[left](comp)),
+                                                                                         std::max(field[left](comp) - field[left_left](comp),
+                                                                                                  beta*(field[right](comp) - field[left](comp)))));
+                                                }
+=======
                                               #ifdef ORDER_2
                                                 // Compute the stencil
                                                 const auto& left_left   = cells[0];
                                                 const auto& left        = cells[1];
                                                 const auto& right       = cells[2];
                                                 const auto& right_right = cells[3];
+>>>>>>> main
 
                                                 // MUSCL reconstruction
                                                 FluxValue<typename Flux<Field>::cfg> qL = field[left];
@@ -443,6 +473,10 @@ namespace samurai {
                                                                                                     beta*(field[right_right](comp) - field[right](comp)))));
                                                   }
                                                 }
+<<<<<<< HEAD
+                                              }
+                                              */
+=======
                                               #else
                                                 // Compute the stencil and extract state
                                                 const auto& left  = cells[0];
@@ -451,6 +485,7 @@ namespace samurai {
                                                 const FluxValue<typename Flux<Field>::cfg>& qL = field[left];
                                                 const FluxValue<typename Flux<Field>::cfg>& qR = field[right];
                                               #endif
+>>>>>>> main
 
                                               FluxValue<typename Flux<Field>::cfg> F_minus,
                                                                                    F_plus;
@@ -996,6 +1031,48 @@ namespace samurai {
         // Compute now the "discrete" flux function
         discrete_flux[d].cons_flux_function = [&](auto& cells, const Field& field)
                                               {
+<<<<<<< HEAD
+                                                // Compute the stencil
+                                                const auto& left_left   = cells[0];
+                                                const auto& left        = cells[1];
+                                                const auto& right       = cells[2];
+                                                const auto& right_right = cells[3];
+
+                                                // MUSCL reconstruction
+                                                FluxValue<typename Flux<Field>::cfg> qL = field[left];
+                                                FluxValue<typename Flux<Field>::cfg> qR = field[right];
+
+                                                /*
+                                                const double beta = 1.0;
+                                                for(std::size_t comp = 0; comp < Field::size; ++comp) {
+                                                  if(field[right](comp) - field[left](comp) > 0.0) {
+                                                    qL(comp) += 0.5*std::max(0.0, std::max(std::min(beta*(field[left](comp) - field[left_left](comp)),
+                                                                                                    field[right](comp) - field[left](comp)),
+                                                                                           std::min(field[left](comp) - field[left_left](comp),
+                                                                                                    beta*(field[right](comp) - field[left](comp)))));
+                                                  }
+                                                  else if(field[right](comp) - field[left](comp) < 0.0) {
+                                                    qL(comp) += 0.5*std::min(0.0, std::min(std::max(beta*(field[left](comp) - field[left_left](comp)),
+                                                                                                    field[right](comp) - field[left](comp)),
+                                                                                           std::max(field[left](comp) - field[left_left](comp),
+                                                                                                    beta*(field[right](comp) - field[left](comp)))));
+                                                  }
+
+                                                  if(field[right_right](comp) - field[right](comp) > 0.0) {
+                                                    qR(comp) -= 0.5*std::max(0.0, std::max(std::min(beta*(field[right](comp) - field[left](comp)),
+                                                                                                    field[right_right](comp) - field[right](comp)),
+                                                                                           std::min(field[right](comp) - field[left](comp),
+                                                                                                    beta*(field[right_right](comp) - field[right](comp)))));
+                                                  }
+                                                  else if(field[right_right](comp) - field[right](comp) < 0.0) {
+                                                    qR(comp) -= 0.5*std::min(0.0, std::min(std::max(beta*(field[right](comp) - field[left](comp)),
+                                                                                                    field[right_right](comp) - field[right](comp)),
+                                                                                           std::max(field[right](comp) - field[left](comp),
+                                                                                                    beta*(field[right_right](comp) - field[right](comp)))));
+                                                  }
+                                                }
+                                                */
+=======
                                                 #ifdef ORDER_2
                                                   // Compute the stencil
                                                   const auto& left_left   = cells[0];
@@ -1043,6 +1120,7 @@ namespace samurai {
                                                   FluxValue<typename Flux<Field>::cfg> qL = field[left];
                                                   FluxValue<typename Flux<Field>::cfg> qR = field[right];
                                                 #endif
+>>>>>>> main
 
                                                 return compute_discrete_flux(qL, qR, d);;
                                           };

@@ -23,6 +23,8 @@ public:
   virtual T e_value(const T rho, const T pres) const = 0; // Function to compute the internal energy from density and pressure
 
   virtual T c_value(const T rho, const T pres) const = 0; // Function to compute the speed of sound from density and pressure
+
+  virtual T Temp_value(const T rho, const T e) const = 0; // Function to compute the temperature from density and internal energy
 };
 
 
@@ -36,7 +38,7 @@ public:
 
   SG_EOS(const SG_EOS&) = default; // Default copy-constructor
 
-  SG_EOS(const double gamma_, const double pi_infty_, const double q_infty_ = 0.0); // Constructor which accepts as arguments
+  SG_EOS(const double gamma_, const double pi_infty_, const double c_v_, const double q_infty_ = 0.0); // Constructor which accepts as arguments
                                                                                     // the isentropic exponent and the two parameters
                                                                                     // that characterize the fluid
 
@@ -48,9 +50,12 @@ public:
 
   virtual T c_value(const T rho, const T pres) const override; // Function to compute the speed of sound from density and pressure
 
+  virtual T Temp_value(const T rho, const T e) const override; // Function to compute the temperature from density and internaly energy
+
 protected:
   const double gamma;    // Isentropic exponent
   const double pi_infty; // Pressure at 'infinite'
+  const double c_v;
   const double q_infty;  // Internal energy at 'infinite'
 };
 
@@ -58,8 +63,8 @@ protected:
 // Implement the constructor
 //
 template<typename T>
-SG_EOS<T>::SG_EOS(const double gamma_, const double pi_infty_, const double q_infty_):
-  EOS<T>(), gamma(gamma_), pi_infty(pi_infty_), q_infty(q_infty_) {}
+SG_EOS<T>::SG_EOS(const double gamma_, const double pi_infty_, const double c_v_, const double q_infty_):
+  EOS<T>(), gamma(gamma_), pi_infty(pi_infty_), c_v(c_v_), q_infty(q_infty_) {}
 
 
 // Compute the pressure value from the density and the internal energy
@@ -93,5 +98,9 @@ T SG_EOS<T>::c_value(const T rho, const T pres) const {
   return std::sqrt(gamma*(pres + pi_infty)/rho);
 }
 
+template<typename T>
+T SG_EOS<T>::Temp_value(const T rho, const T e) const {
+  return (e - q_infty - pi_infty/rho)/c_v;
+}
 
 #endif

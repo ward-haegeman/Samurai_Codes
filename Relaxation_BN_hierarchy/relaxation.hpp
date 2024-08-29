@@ -137,6 +137,47 @@ private:
 
 // Implement class constructor
 //
+<<<<<<< HEAD
+#ifdef SULICIU_RELAXATION
+  template<std::size_t dim>
+  Relaxation<dim>::Relaxation(const xt::xtensor_fixed<double, xt::xshape<dim>>& min_corner,
+                              const xt::xtensor_fixed<double, xt::xshape<dim>>& max_corner,
+                              std::size_t min_level, std::size_t max_level,
+                              double Tf_, double cfl_, std::size_t nfiles_,
+                              bool do_vel_relax, bool do_pres_relax,
+                              bool do_pres_reinit, bool do_energy_update_phase_1,
+                              bool do_preserve_energy):
+    box(min_corner, max_corner), mesh(box, min_level, max_level, {false}),
+    Tf(Tf_), cfl(cfl_), nfiles(nfiles_),
+    apply_velocity_relax(do_vel_relax), apply_pressure_relax(do_pres_relax),
+    apply_pressure_reinit(do_pres_reinit), start_energy_update_phase_1(do_energy_update_phase_1),
+    preserve_energy(do_preserve_energy),
+    EOS_phase1(EquationData::gamma_1, EquationData::pi_infty_1, EquationData::c_v_1, EquationData::q_infty_1),
+    EOS_phase2(EquationData::gamma_2, EquationData::pi_infty_2, EquationData::c_v_2, EquationData::q_infty_2),
+    numerical_flux(EOS_phase1, EOS_phase2) {
+      if(!apply_velocity_relax) {
+        assert(!apply_pressure_relax && "You cannot apply pressure relaxation without applying velocity relaxation");
+      }
+      if(apply_pressure_relax) {
+        assert(apply_velocity_relax && "You cannot apply pressure relaxation without applying velocity relaxation");
+      }
+      std::cout << "Initializing variables" << std::endl;
+      std::cout << std::endl;
+      init_variables();
+  }
+#elifdef RUSANOV_FLUX
+  template<std::size_t dim>
+  Relaxation<dim>::Relaxation(const xt::xtensor_fixed<double, xt::xshape<dim>>& min_corner,
+                              const xt::xtensor_fixed<double, xt::xshape<dim>>& max_corner,
+                              std::size_t min_level, std::size_t max_level,
+                              double Tf_, double cfl_, std::size_t nfiles_,
+                              bool do_vel_relax, bool do_pres_relax,
+                              bool do_pres_reinit, bool do_energy_update_phase_1,
+                              bool do_preserve_energy):
+    box(min_corner, max_corner), mesh(box, min_level, max_level, {false}),
+    Tf(Tf_), cfl(cfl_), nfiles(nfiles_),
+    apply_velocity_relax(do_vel_relax), apply_pressure_relax(do_pres_relax),
+=======
 template<std::size_t dim>
 Relaxation<dim>::Relaxation(const xt::xtensor_fixed<double, xt::xshape<dim>>& min_corner,
                             const xt::xtensor_fixed<double, xt::xshape<dim>>& max_corner,
@@ -149,6 +190,7 @@ Relaxation<dim>::Relaxation(const xt::xtensor_fixed<double, xt::xshape<dim>>& mi
   Tf(Tf_), cfl(cfl_), nfiles(nfiles_),
   apply_velocity_relax(do_vel_relax), apply_pressure_relax(do_pres_relax),
   #ifdef RELAX_POLYNOM
+>>>>>>> main
     apply_pressure_reinit(do_pres_reinit), start_energy_update_phase_1(do_energy_update_phase_1),
     preserve_energy(do_preserve_energy),
   #endif
